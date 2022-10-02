@@ -1,13 +1,9 @@
-[workspace]
-members = ["hane-kernal", "hane-syntax"]
-
 [package]
-name = "hane"
+name = "hane-syntax"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-hane-kernal = { path="hane-kernal" }
-hane-syntax = { path="hane-syntax" }
+hane-kernal = { path = "../hane-kernal" }
