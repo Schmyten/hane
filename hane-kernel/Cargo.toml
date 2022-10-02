@@ -1,5 +1,5 @@
 [package]
-name = "hane-kernal"
+name = "hane-kernel"
 version = "0.1.0"
 edition = "2021"
 
