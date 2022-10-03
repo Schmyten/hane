@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::fmt::{self, Display, Formatter};
 
 #[derive(Clone)]
 pub enum Term<B> {
@@ -8,6 +9,19 @@ pub enum Term<B> {
     Product(B, Box<Term<B>>, Box<Term<B>>),
     Abstract(B, Box<Term<B>>, Box<Term<B>>),
     Bind(B, Box<Term<B>>, Box<Term<B>>, Box<Term<B>>),
+}
+
+impl<B> Display for Term<B> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Term::Prop => write!(f, "Prop"),
+            Term::Var(n) => write!(f, "'{}", n),
+            Term::App(t1, t2) => write!(f, "({}) ({})", t1, t2),
+            Term::Product(_, t1, t2) => write!(f, "forall[{}] ({})", t1, t2),
+            Term::Abstract(_, t1, t2) =>  write!(f, "fun[{}] ({})", t1, t2),
+            Term::Bind(_, t1, t2, t3) => write!(f, "let[{} : {}] ({})", t1, t2, t3),
+        }
+    }
 }
 
 impl<B: Clone> Term<B> {

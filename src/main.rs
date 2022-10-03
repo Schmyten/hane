@@ -1,49 +1,122 @@
-use hane_kernel::term::Term;
-use hane_syntax::print::print_term;
-
-use Term::Prop;
-use Term::Var;
-
-fn app<B>(f: Term<B>, args: impl IntoIterator<Item = Term<B>>) -> Term<B> {
-    args.into_iter().fold(f, |f, v| Term::App(Box::new(f), Box::new(v)))
-}
-
-fn product<B, I: IntoIterator<Item = (B, Term<B>)>>(xs: I, t: Term<B>) -> Term<B> where I::IntoIter: DoubleEndedIterator {
-    xs.into_iter().rev().fold(t, |t, (x, x_tp)| Term::Product(x, Box::new(x_tp), Box::new(t)))
-}
-
-fn lamda<B, I: IntoIterator<Item = (B, Term<B>)>>(xs: I, t: Term<B>) -> Term<B> where I::IntoIter: DoubleEndedIterator {
-    xs.into_iter().rev().fold(t, |t, (x, x_tp)| Term::Abstract(x, Box::new(x_tp), Box::new(t)))
-}
-
-fn bind<B>(x: B, x_tp: Term<B>, x_val: Term<B>, t: Term<B>) -> Term<B> {
-    Term::Bind(x, Box::new(x_tp), Box::new(x_val), Box::new(t))
-}
+use std::fs::{read_dir, read_to_string};
+use std::path::Path;
+use hane_syntax::parser::parse;
 
 fn main() {
-    let conn = product([("P".to_owned(), Prop), ("Q".to_owned(), Prop)], Prop);
-    let imply = lamda([("P".to_owned(), Prop), ("Q".to_owned(), Prop)],
-        product([("p".to_owned(), Var(1))], Var(1))
-    );
-    println!("let imply := {}", print_term(&imply, &mut Vec::new(), 200));
-    let mut names = vec!["imply".to_owned()];
+    let mut tests = 0;
+    let mut failed = 0;
 
-    let and = lamda([("P".to_owned(), Prop), ("Q".to_owned(), Prop)],
-        product([("R".to_owned(), Prop)],
-            app(Var(3), [app(Var(3), [Var(2), app(Var(3), [Var(1), Var(0)])]), Var(0)])
-        )
-    );
-    println!("let and := {}", print_term(&and, &mut names, 200));
-    let mut and = bind("imply".to_owned(), conn.clone(), imply.clone(), and);
-    and.normalize();
-    println!("{}", print_term(&and, &mut Vec::new(), 200));
-    let or = lamda([("P".to_owned(), Prop), ("Q".to_owned(), Prop)],
-        product([("R".to_owned(), Prop)],
-            app(Var(3), [app(Var(3), [app(Var(3), [Var(2), Var(0)]), app(Var(3), [app(Var(3), [Var(1), Var(0)]), Var(0)])]), Var(0)])
-        )
-    );
-    println!("let or := {}", print_term(&or, &mut names, 200));
-    let mut or = bind("imply".to_owned(), conn.clone(), imply.clone(), or);
-    or.normalize();
-    println!("{}", print_term(&or, &mut Vec::new(), 200));
+    for test in read_dir("tests").unwrap() {
+        let test = test.unwrap();
+        if !test.file_type().unwrap().is_file() { continue; }
+        let fullname = test.file_name();
+        let fullname = fullname.to_str().unwrap();
+        if !fullname.ends_with(".v") { continue; }
+        let name = &fullname[..fullname.len()-2];
+        let path = test.path();
+        let path = path.to_str().unwrap();
+
+        tests += 1;
+
+        let content = read_to_string(path).unwrap();
+        let parse_result = parse(&content);
+
+        let parse_err = format!("tests/{}.parse.err", name);
+        if Path::new(&parse_err).exists() {
+            let parse_err = read_to_string(parse_err).unwrap();
+            match parse_result {
+                Ok(expr) => {
+                    eprintln!("{name}: Expected a parsing error, but expresion passed succesfully");
+                    failed += 1;
+                    continue;
+                },
+                Err(err) => {
+                    let err = err.print(path, &content);
+                    if err != parse_err {
+                        eprintln!("{name}: Parsing error does not match expected error");
+                        eprintln!("expected:");
+                        eprintln!("```\n{parse_err}\n```");
+                        eprintln!("actual:");
+                        eprintln!("```\n{err}\n```");
+                        failed += 1;
+                        continue;
+                    }
+                },
+            }
+
+            continue;
+        }
+
+        let expr = match parse_result {
+            Ok(expr) => expr,
+            Err(err) => {
+                let err = err.print(path, &content);
+                eprintln!("{name}: Failed to parse expresion");
+                eprintln!("```\n{err}\n```");
+                failed += 1;
+                continue;
+            },
+        };
+
+        let mut names = Vec::new();
+        let lower_result = expr.lower(&mut names);
+
+        let lower_err = &format!("tests/{name}.lower.err");
+        if Path::new(&lower_err).exists() {
+            let lower_err = read_to_string(lower_err).unwrap();
+            match lower_result {
+                Ok(expr) => {
+                    eprintln!("{name}: Expected a lowering error, but expresion lowered succesfully");
+                    failed += 1;
+                    continue;
+                },
+                Err(err) => {
+                    let err = err.print(path, &content);
+                    if err != lower_err {
+                        eprintln!("{name}: Lowering error does not match expected error");
+                        eprintln!("expected:");
+                        eprintln!("```\n{lower_err}\n```");
+                        eprintln!("actual:");
+                        eprintln!("```\n{err}\n```");
+                        failed += 1;
+                        continue;
+                    }
+                },
+            }
+
+            continue;
+        }
+
+        let lower_out = format!("tests/{name}.lower");
+        if !Path::new(&lower_out).exists() { continue; }
+
+        let term = match lower_result {
+            Ok(term) => term,
+            Err(err) => {
+                let err = err.print(path, &content);
+                eprintln!("{name}: Failed to lower expresion");
+                eprintln!("```\n{err}\n```");
+                failed += 1;
+                continue;
+            },
+        };
+
+        let lower_out = read_to_string(&lower_out).unwrap();
+        let lower_print = format!("{term}");
+        if lower_print != lower_out {
+            eprintln!("{name}: Lowered expresion does not match expected output");
+            eprintln!("expected:");
+            eprintln!("```\n{lower_out}\n```");
+            eprintln!("actual:");
+            eprintln!("```\n{lower_print}\n```");
+            failed += 1;
+            continue;
+        }
+    }
+
+    if failed != 0 {
+        panic!("Failed {failed}/{tests}");
+    } else {
+        println!("All tests succeded: {tests}/{tests}");
+    }
 }
