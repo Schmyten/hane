@@ -47,7 +47,7 @@ pub fn write_term(buf: &mut impl Write, term: &Term, names: &mut Vec<String>, le
         Term::Abstract(x, x_tp, t) => {
             let x = fresh(x, names);
             if level < 200 { write!(buf, "(")?; }
-            write!(buf, "func {x} : ")?;
+            write!(buf, "fun {x} : ")?;
             write_term(buf, x_tp, names, 200)?;
             write!(buf, " => ")?;
             names.push(x);

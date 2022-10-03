@@ -1,0 +1,19 @@
+expr = { expr_inner+ }
+expr_inner = _{ expr_prop | expr_var | expr_product | expr_abstract | expr_bind | "(" ~ expr ~ ")" }
+expr_prop = { keyword_prop }
+expr_var = { ident }
+expr_product = { keyword_forall ~ ident ~ ":" ~ expr ~ "," ~ expr }
+expr_abstract = { keyword_fun ~ ident ~ ":" ~ expr ~ "=>" ~ expr }
+expr_bind = { keyword_let ~ ident ~ ":" ~ expr ~ ":=" ~ expr ~ keyword_in ~ expr }
+
+keyword = _{ keyword_prop | keyword_forall | keyword_fun | keyword_let | keyword_in }
+keyword_prop = _{ "Prop" }
+keyword_forall = _{ "forall" }
+keyword_fun = _{ "fun" }
+keyword_let = _{ "let" }
+keyword_in = _{ "in" }
+
+ident = @{ !keyword ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+
+WHITESPACE = _{ " " | "\n" | "\r" }
+COMMENT = _{ "(*" ~ (!"*)" ~ (COMMENT | ANY))* ~ "*)" }

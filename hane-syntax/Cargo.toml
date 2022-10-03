@@ -7,3 +7,5 @@ edition = "2021"
 
 [dependencies]
 hane-kernel = { path = "../hane-kernel" }
+pest = "2.2.1"
+pest_derive = "2.4.0"
