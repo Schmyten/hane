@@ -112,6 +112,33 @@ fn main() {
             failed += 1;
             continue;
         }
+
+        let mut env = Vec::new();
+        let type_result = term.type_check(&mut env);
+
+        let type_out = format!("tests/{name}.type");
+        if !Path::new(&type_out).exists() { continue; }
+
+        let term = match type_result {
+            Some(term) => term,
+            None => {
+                eprintln!("{name}: Failed to type check expresion");
+                failed += 1;
+                continue;
+            },
+        };
+
+        let type_out = read_to_string(&type_out).unwrap();
+        let type_print = format!("{term}");
+        if type_print != type_out {
+            eprintln!("{name}: The expresions type does not match expected output");
+            eprintln!("expected:");
+            eprintln!("```\n{type_out}\n```");
+            eprintln!("actual:");
+            eprintln!("```\n{type_print}\n```");
+            failed += 1;
+            continue;
+        }
     }
 
     if failed != 0 {

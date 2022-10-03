@@ -11,6 +11,21 @@ pub enum Term<B> {
     Bind(B, Box<Term<B>>, Box<Term<B>>, Box<Term<B>>),
 }
 
+impl<B> PartialEq for Term<B> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Var(l0), Self::Var(r0)) => l0 == r0,
+            (Self::App(l0, l1), Self::App(r0, r1)) => l0 == r0 && l1 == r1,
+            (Self::Product(_, l0, l1), Self::Product(_, r0, r1)) => l0 == r0 && l1 == r1,
+            (Self::Abstract(_, l0, l1), Self::Abstract(_, r0, r1)) => l0 == r0 && l1 == r1,
+            (Self::Bind(_, l0, l1, l2), Self::Bind(_, r0, r1, r2)) => l0 == r0 && l1 == r1 && l2 == r2,
+            _ => core::mem::discriminant(self) == core::mem::discriminant(other),
+        }
+    }
+}
+
+impl<B> Eq for Term<B> {}
+
 impl<B> Display for Term<B> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
@@ -129,6 +144,74 @@ impl<B: Clone> Term<B> {
                 },
             }
             break;
+        }
+    }
+
+    pub fn convertable(&self, other: &Self) -> bool {
+        let mut this = self.clone();
+        let mut other = other.clone();
+        this.normalize();
+        other.normalize();
+        this == other
+    }
+
+    pub fn type_check(&self, env: &mut Vec<Term<B>>) -> Option<Self> {
+        match self {
+            Term::Prop => Some(Term::Prop),
+            Term::Var(n) => if *n < env.len() { Some(env[env.len() - 1 - n].clone()) } else { None },
+            Term::App(f, v) => {
+                let mut f_tp = f.type_check(env)?;
+                let v_tp = v.type_check(env)?;
+                f_tp.normalize();
+                if let Term::Product(_, input_tp, output_tp) = f_tp {
+                    if input_tp.convertable(&v_tp) {
+                        Some(output_tp.subst_single(0, v))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            },
+            Term::Product(_, x_tp, t) => {
+                let x_sort = x_tp.type_check(env)?;
+                env.push((&**x_tp).clone());
+                let t_tp = t.type_check(env);
+                env.pop();
+                let t_tp = t_tp?;
+                if let Term::Prop = x_sort {
+                    if let Term::Prop = t_tp {
+                        Some(Term::Prop)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            },
+            Term::Abstract(x, x_tp, t) => {
+                let x_sort = x_tp.type_check(env)?;
+                env.push((&**x_tp).clone());
+                let t_tp = t.type_check(env);
+                env.pop();
+                let t_tp = t_tp?;
+                if let Term::Prop = x_sort {
+                    Some(Term::Product(x.clone(), x_tp.clone(), Box::new(t_tp)))
+                } else {
+                    None
+                }
+            },
+            Term::Bind(_, x_tp, x_val, t) => {
+                let x_sort = x_tp.type_check(env)?;
+                if let Term::Prop = x_sort {} else { return None }
+                let x_val_tp = x_val.type_check(env)?;
+                if !x_tp.convertable(&x_val_tp) { return None }
+                let t_subst = t.subst_single(0, x_val);
+                env.push((&**x_tp).clone());
+                let t_tp = t_subst.type_check(env);
+                env.pop();
+                t_tp
+            },
         }
     }
 }
