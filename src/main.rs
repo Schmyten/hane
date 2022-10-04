@@ -1,5 +1,6 @@
 use std::fs::{read_dir, read_to_string};
 use std::path::Path;
+use hane_kernel::stack::Stack;
 use hane_syntax::parser::parse;
 
 fn main() {
@@ -58,7 +59,7 @@ fn main() {
             },
         };
 
-        let mut names = Vec::new();
+        let mut names = Stack::new();
         let lower_result = expr.lower(&mut names);
 
         let lower_err = &format!("tests/{name}.lower.err");
@@ -113,7 +114,7 @@ fn main() {
             continue;
         }
 
-        let mut env = Vec::new();
+        let mut env = Stack::new();
         let type_result = term.type_check(&mut env);
 
         let type_out = format!("tests/{name}.type");

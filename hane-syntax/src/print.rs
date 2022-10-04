@@ -1,8 +1,10 @@
 use std::fmt::{self, Write};
 
+use hane_kernel::stack::Stack;
+
 type Term = hane_kernel::term::Term<String>;
 
-fn fresh(x: &String, names: &[String]) -> String {
+fn fresh(x: &String, names: &Stack<String>) -> String {
     if !names.contains(x) {
         return x.to_owned();
     }
@@ -17,12 +19,12 @@ fn fresh(x: &String, names: &[String]) -> String {
     unreachable!()
 }
 
-pub fn write_term(buf: &mut impl Write, term: &Term, names: &mut Vec<String>, level: usize) -> fmt::Result {
+pub fn write_term(buf: &mut impl Write, term: &Term, names: &mut Stack<String>, level: usize) -> fmt::Result {
     match term {
         Term::Prop => write!(buf, "Prop"),
         Term::Var(n) =>
-            if *n >= names.len() { write!(buf, "?:{}", n - names.len()) }
-            else { write!(buf, "{}", names[names.len() - n - 1]) },
+            if let Some(x) = names.get(*n) { write!(buf, "{}", x) }
+            else { write!(buf, "?:{}", n - names.len()) },
         Term::App(f, v) => {
             if level < 10 { write!(buf, "(")?; }
             write_term(buf, f, names, 10)?;
@@ -75,7 +77,7 @@ pub fn write_term(buf: &mut impl Write, term: &Term, names: &mut Vec<String>, le
     }
 }
 
-pub fn print_term(term: &Term, names: &mut Vec<String>, level: usize) -> String {
+pub fn print_term(term: &Term, names: &mut Stack<String>, level: usize) -> String {
     let mut buf = String::new();
     write_term(&mut buf, term, names, level).unwrap();
     buf

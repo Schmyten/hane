@@ -1,6 +1,8 @@
 use std::cmp::Ordering;
 use std::fmt::{self, Display, Formatter};
 
+use crate::stack::Stack;
+
 #[derive(Clone)]
 pub enum Term<B> {
     Prop,
@@ -155,10 +157,10 @@ impl<B: Clone> Term<B> {
         this == other
     }
 
-    pub fn type_check(&self, env: &mut Vec<Term<B>>) -> Option<Self> {
+    pub fn type_check(&self, env: &mut Stack<Term<B>>) -> Option<Self> {
         match self {
             Term::Prop => Some(Term::Prop),
-            Term::Var(n) => if *n < env.len() { Some(env[env.len() - 1 - n].clone()) } else { None },
+            Term::Var(n) => env.get(*n).cloned(),
             Term::App(f, v) => {
                 let mut f_tp = f.type_check(env)?;
                 let v_tp = v.type_check(env)?;

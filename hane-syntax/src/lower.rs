@@ -1,6 +1,6 @@
 use std::fmt::{self, Display, Formatter};
 
-use hane_kernel::term::Term;
+use hane_kernel::{term::Term, stack::Stack};
 use crate::{Expr, ExprVariant, SpanError};
 
 pub enum LoweringError {
@@ -16,7 +16,7 @@ impl Display for LoweringError {
 }
 
 impl Expr {
-    pub fn lower(self, names: &mut Vec<String>) -> Result<Term<String>, SpanError<LoweringError>> {
+    pub fn lower(self, names: &mut Stack<String>) -> Result<Term<String>, SpanError<LoweringError>> {
         Ok(match *self.variant {
             ExprVariant::Prop => Term::Prop,
             ExprVariant::Var(x) => {
