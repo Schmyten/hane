@@ -20,7 +20,7 @@ impl Expr {
         Ok(match *self.variant {
             ExprVariant::Prop => Term::Prop,
             ExprVariant::Var(x) => {
-                if let Some((i, _)) = names.iter().rev().enumerate().find(|(_, y)| x==**y) {
+                if let Some((i, _)) = names.iter().enumerate().find(|(_, y)| x==**y) {
                     Term::Var(i)
                 } else {
                     return Err(SpanError { span: self.span.clone(), err: LoweringError::UnknownVariable(x.to_owned()) })
