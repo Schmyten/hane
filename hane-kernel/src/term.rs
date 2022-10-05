@@ -13,6 +13,11 @@ pub enum Term<B> {
     Bind(B, Box<Term<B>>, Box<Term<B>>, Box<Term<B>>),
 }
 
+pub struct LEntry<B> {
+    value: Option<Term<B>>,
+    ttype: Term<B>,
+}
+
 impl<B> PartialEq for Term<B> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -108,39 +113,41 @@ impl<B: Clone> Term<B> {
         ).ok()
     }
 
-    pub fn normalize(&mut self) {
+    pub fn normalize(&mut self, lenv: &mut Stack<LEntry<B>>) {
         loop {
             match self {
                 Term::Prop => break,
-                Term::Var(_) => break,
+                Term::Var(n) => {
+                    // δ reduction
+                    if let Some(value) = &lenv.get(*n).unwrap().value {
+                        *self = value.clone();
+                    }
+                },
                 Term::App(f, v) => {
-                    f.normalize();
-                    v.normalize();
+                    f.normalize(lenv);
+                    v.normalize(lenv);
 
+                    // β reduction
                     if let Term::Abstract(_, _, t) = &**f {
                         *self = t.subst_single(0, v);
                         continue;
                     }
                 },
-                Term::Product(_, t1, t2) => {
-                    t1.normalize();
-                    t2.normalize();
+                Term::Product(_name, input_type, output_type) => {
+                    input_type.normalize(lenv);
+                    lenv.push(LEntry { value: None, ttype: (&**input_type).clone() });
+                    output_type.normalize(lenv);
+                    lenv.pop();
                 },
-                Term::Abstract(_, t, b) => {
-                    t.normalize();
-                    b.normalize();
-
-                    if let Term::App(f, v) = &**b {
-                        if let Term::Var(0) = &**v {
-                            if let Some(t) = f.pop(0) {
-                                *self = t;
-                                continue;
-                            }
-                        }
-                    }
+                Term::Abstract(_name, input_type, body) => {
+                    input_type.normalize(lenv);
+                    lenv.push(LEntry { value: None, ttype: (&**input_type).clone() });
+                    body.normalize(lenv);
+                    lenv.pop();
                 },
-                Term::Bind(_, _, val, t) => {
-                    val.normalize();
+                Term::Bind(_name, _type, val, t) => {
+                    val.normalize(lenv);
+                    // ζ reduction (Remove let binding)
                     *self = t.subst_single(0, val);
                     continue;
                 },
@@ -149,24 +156,56 @@ impl<B: Clone> Term<B> {
         }
     }
 
-    pub fn convertable(&self, other: &Self) -> bool {
+    fn eta(&mut self) {
+        match self {
+            Term::Prop => {},
+            Term::Var(_) => {},
+            Term::App(f, v) => {
+                f.eta();
+                v.eta();
+            },
+            Term::Product(_, input_type, output_type) => {
+                input_type.eta();
+                output_type.eta();
+            },
+            Term::Abstract(_, input_type, body) => {
+                input_type.eta();
+                body.eta();
+            },
+            Term::Bind(_, _, _, _) => unreachable!(),
+        }
+
+        if let Term::Abstract(_, _, body) = self {
+            if let Term::App(f, v) = &**body {
+                if let Term::Var(0) = &**v {
+                    if let Some(f) = f.pop(0) {
+                        *self = f;
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn convertable(&self, other: &Self, lenv: &mut Stack<LEntry<B>>) -> bool {
         let mut this = self.clone();
         let mut other = other.clone();
-        this.normalize();
-        other.normalize();
+        this.normalize(lenv);
+        this.eta();
+        other.normalize(lenv);
+        other.eta();
         this == other
     }
 
-    pub fn type_check(&self, env: &mut Stack<Term<B>>) -> Option<Self> {
+    pub fn type_check(&self, lenv: &mut Stack<LEntry<B>>) -> Option<Self> {
         match self {
             Term::Prop => Some(Term::Prop),
-            Term::Var(n) => env.get(*n).cloned(),
+            Term::Var(n) => lenv.get(*n).map(|e|e.ttype.clone()),
             Term::App(f, v) => {
-                let mut f_tp = f.type_check(env)?;
-                let v_tp = v.type_check(env)?;
-                f_tp.normalize();
+                let mut f_tp = f.type_check(lenv)?;
+                let v_tp = v.type_check(lenv)?;
+                f_tp.normalize(lenv);
                 if let Term::Product(_, input_tp, output_tp) = f_tp {
-                    if input_tp.convertable(&v_tp) {
+                    if input_tp.convertable(&v_tp, lenv) {
                         Some(output_tp.subst_single(0, v))
                     } else {
                         None
@@ -176,10 +215,10 @@ impl<B: Clone> Term<B> {
                 }
             },
             Term::Product(_, x_tp, t) => {
-                let x_sort = x_tp.type_check(env)?;
-                env.push((&**x_tp).clone());
-                let t_tp = t.type_check(env);
-                env.pop();
+                let x_sort = x_tp.type_check(lenv)?;
+                lenv.push(LEntry { value: None, ttype: (&**x_tp).clone() });
+                let t_tp = t.type_check(lenv);
+                lenv.pop();
                 let t_tp = t_tp?;
                 if let Term::Prop = x_sort {
                     if let Term::Prop = t_tp {
@@ -192,10 +231,10 @@ impl<B: Clone> Term<B> {
                 }
             },
             Term::Abstract(x, x_tp, t) => {
-                let x_sort = x_tp.type_check(env)?;
-                env.push((&**x_tp).clone());
-                let t_tp = t.type_check(env);
-                env.pop();
+                let x_sort = x_tp.type_check(lenv)?;
+                lenv.push(LEntry { value: None, ttype: (&**x_tp).clone() });
+                let t_tp = t.type_check(lenv);
+                lenv.pop();
                 let t_tp = t_tp?;
                 if let Term::Prop = x_sort {
                     Some(Term::Product(x.clone(), x_tp.clone(), Box::new(t_tp)))
@@ -204,14 +243,14 @@ impl<B: Clone> Term<B> {
                 }
             },
             Term::Bind(_, x_tp, x_val, t) => {
-                let x_sort = x_tp.type_check(env)?;
+                let x_sort = x_tp.type_check(lenv)?;
                 if let Term::Prop = x_sort {} else { return None }
-                let x_val_tp = x_val.type_check(env)?;
-                if !x_tp.convertable(&x_val_tp) { return None }
+                let x_val_tp = x_val.type_check(lenv)?;
+                if !x_tp.convertable(&x_val_tp, lenv) { return None }
                 let t_subst = t.subst_single(0, x_val);
-                env.push((&**x_tp).clone());
-                let t_tp = t_subst.type_check(env);
-                env.pop();
+                lenv.push(LEntry { value: None, ttype: (&**x_tp).clone() });
+                let t_tp = t_subst.type_check(lenv);
+                lenv.pop();
                 t_tp
             },
         }
