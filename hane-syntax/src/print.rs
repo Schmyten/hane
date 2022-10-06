@@ -25,6 +25,7 @@ pub fn write_term(buf: &mut impl Write, term: &Term, names: &mut Stack<String>, 
         Term::Var(n) =>
             if let Some(x) = names.get(*n) { write!(buf, "{}", x) }
             else { write!(buf, "?:{}", n - names.len()) },
+        Term::Const(name) => write!(buf, "{name}"),
         Term::App(f, v) => {
             if level < 10 { write!(buf, "(")?; }
             write_term(buf, f, names, 10)?;

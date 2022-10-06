@@ -1,6 +1,6 @@
 use std::fs::{read_dir, read_to_string};
 use std::path::Path;
-use hane_kernel::stack::Stack;
+use hane_kernel::global::Global;
 use hane_syntax::parser::parse;
 
 fn main() {
@@ -26,7 +26,7 @@ fn main() {
         if Path::new(&parse_err).exists() {
             let parse_err = read_to_string(parse_err).unwrap();
             match parse_result {
-                Ok(expr) => {
+                Ok(commands) => {
                     eprintln!("{name}: Expected a parsing error, but expresion passed succesfully");
                     failed += 1;
                     continue;
@@ -48,8 +48,8 @@ fn main() {
             continue;
         }
 
-        let expr = match parse_result {
-            Ok(expr) => expr,
+        let commands = match parse_result {
+            Ok(commands) => commands,
             Err(err) => {
                 let err = err.print(path, &content);
                 eprintln!("{name}: Failed to parse expresion");
@@ -59,24 +59,25 @@ fn main() {
             },
         };
 
-        let mut names = Stack::new();
-        let lower_result = expr.lower(&mut names);
+        let mut global = Global::new();
+        let result = commands.into_iter().try_for_each(|command|command.lower(&mut global));
 
-        let lower_err = &format!("tests/{name}.lower.err");
-        if Path::new(&lower_err).exists() {
-            let lower_err = read_to_string(lower_err).unwrap();
-            match lower_result {
-                Ok(expr) => {
-                    eprintln!("{name}: Expected a lowering error, but expresion lowered succesfully");
+        let result_err = &format!("tests/{name}.err");
+        if Path::new(&result_err).exists() {
+            let result_err = read_to_string(result_err).unwrap();
+            match result {
+                Ok(_) => {
+                    eprintln!("{name}: Expected an error, but test ran successfully");
+                    eprintln!("```\n{global}\n```");
                     failed += 1;
                     continue;
                 },
                 Err(err) => {
                     let err = err.print(path, &content);
-                    if err != lower_err {
-                        eprintln!("{name}: Lowering error does not match expected error");
+                    if err != result_err {
+                        eprintln!("{name}: Error does not match expected error");
                         eprintln!("expected:");
-                        eprintln!("```\n{lower_err}\n```");
+                        eprintln!("```\n{result_err}\n```");
                         eprintln!("actual:");
                         eprintln!("```\n{err}\n```");
                         failed += 1;
@@ -88,55 +89,25 @@ fn main() {
             continue;
         }
 
-        let lower_out = format!("tests/{name}.lower");
-        if !Path::new(&lower_out).exists() { continue; }
+        let result_out = format!("tests/{name}.out");
+        if !Path::new(&result_out).exists() { continue; }
 
-        let term = match lower_result {
-            Ok(term) => term,
-            Err(err) => {
-                let err = err.print(path, &content);
-                eprintln!("{name}: Failed to lower expresion");
-                eprintln!("```\n{err}\n```");
-                failed += 1;
-                continue;
-            },
-        };
-
-        let lower_out = read_to_string(&lower_out).unwrap();
-        let lower_print = format!("{term}");
-        if lower_print != lower_out {
-            eprintln!("{name}: Lowered expresion does not match expected output");
-            eprintln!("expected:");
-            eprintln!("```\n{lower_out}\n```");
-            eprintln!("actual:");
-            eprintln!("```\n{lower_print}\n```");
+        if let Err(err) = result {
+            let err = err.print(path, &content);
+            eprintln!("{name}: Failed with error:");
+            eprintln!("```\n{err}\n```");
             failed += 1;
             continue;
         }
 
-        let mut env = Stack::new();
-        let type_result = term.type_check(&mut env);
-
-        let type_out = format!("tests/{name}.type");
-        if !Path::new(&type_out).exists() { continue; }
-
-        let term = match type_result {
-            Some(term) => term,
-            None => {
-                eprintln!("{name}: Failed to type check expresion");
-                failed += 1;
-                continue;
-            },
-        };
-
-        let type_out = read_to_string(&type_out).unwrap();
-        let type_print = format!("{term}");
-        if type_print != type_out {
-            eprintln!("{name}: The expresions type does not match expected output");
+        let result_out = read_to_string(&result_out).unwrap();
+        let result_print = format!("{global}");
+        if result_print != result_out {
+            eprintln!("{name}: Result does not match expected output");
             eprintln!("expected:");
-            eprintln!("```\n{type_out}\n```");
+            eprintln!("```\n{result_out}\n```");
             eprintln!("actual:");
-            eprintln!("```\n{type_print}\n```");
+            eprintln!("```\n{result_print}\n```");
             failed += 1;
             continue;
         }

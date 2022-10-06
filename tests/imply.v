@@ -1,1 +1,0 @@
-fun P : Prop => fun Q : Prop => forall p : P, Q

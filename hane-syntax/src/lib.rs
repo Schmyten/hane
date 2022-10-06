@@ -33,6 +33,16 @@ impl Span {
     }
 }
 
+pub struct Command {
+    pub span: Span,
+    pub variant: CommandVariant,
+}
+
+pub enum CommandVariant {
+    Definition(String, Expr, Expr),
+    Axiom(String, Expr),
+}
+
 pub struct Expr {
     pub span: Span,
     pub variant: Box<ExprVariant>,

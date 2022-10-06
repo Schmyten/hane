@@ -1,0 +1,2 @@
+Definition impl : forall[Prop] (forall[Prop] (Prop)) := fun[Prop] (fun[Prop] (forall['1] ('1))).
+Definition and : forall[Prop] (forall[Prop] (Prop)) := fun[Prop] (fun[Prop] (forall[Prop] (((impl) (((impl) ('2)) (((impl) ('1)) ('0)))) ('0)))).

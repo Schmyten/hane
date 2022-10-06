@@ -1,6 +1,6 @@
 use pest::Parser;
 use pest_derive::Parser;
-use crate::{Expr, ExprVariant, Span, SpanError};
+use crate::{Expr, ExprVariant, Span, SpanError, Command, CommandVariant};
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
@@ -28,13 +28,36 @@ impl From<pest::error::Error<Rule>> for ParseError {
     }
 }
 
-pub fn parse(input: &str) -> Result<Expr, ParseError> {
-    let mut pairs = HaneParser::parse(Rule::expr, input)?;
-    Ok(parse_expr(pairs.next().unwrap()))
+pub fn parse(input: &str) -> Result<Vec<Command>, ParseError> {
+    let pairs = HaneParser::parse(Rule::commands, input)?;
+    Ok(pairs.take_while(|pair|pair.as_rule() != Rule::EOI).map(parse_command).collect())
+}
+
+pub fn parse_command(pair: Pair) -> Command {
+    let span = Span::from_pest(pair.as_span());
+    let rule = pair.as_rule();
+    let mut pairs = pair.into_inner();
+    let variant = match rule {
+        Rule::command_definition => {
+            pairs.next();
+            let name = pairs.next().unwrap().as_str().to_owned();
+            let ttype = parse_expr(pairs.next().unwrap());
+            let value = parse_expr(pairs.next().unwrap());
+            CommandVariant::Definition(name, ttype, value)
+        },
+        Rule::command_axiom => {
+            pairs.next();
+            let name = pairs.next().unwrap().as_str().to_owned();
+            let ttype = parse_expr(pairs.next().unwrap());
+            CommandVariant::Axiom(name, ttype)
+        },
+        r => unreachable!("{:?}", r),
+    };
+    Command { span, variant }
 }
 
 fn parse_expr(pair: Pair) -> Expr {
-    debug_assert!(pair.as_rule() == Rule::expr);
+    debug_assert!(pair.as_rule() == Rule::expr, "Unexpected rule: {:?}", pair.as_rule());
     let mut exprs = pair.into_inner().map(parse_expr_inner);
     let f = exprs.next().unwrap();
     exprs.fold(f, |f, v|
@@ -57,21 +80,25 @@ fn parse_expr_inner(pair: Pair) -> Expr {
         Rule::expr_prop => ExprVariant::Prop,
         Rule::expr_var => ExprVariant::Var(pairs.next().unwrap().as_str().to_owned()),
         Rule::expr_product => {
+            pairs.next();
             let x = pairs.next().unwrap().as_str().to_owned();
             let x_tp = parse_expr(pairs.next().unwrap());
             let t = parse_expr(pairs.next().unwrap());
             ExprVariant::Product(x, x_tp, t)
         },
         Rule::expr_abstract => {
+            pairs.next();
             let x = pairs.next().unwrap().as_str().to_owned();
             let x_tp = parse_expr(pairs.next().unwrap());
             let t = parse_expr(pairs.next().unwrap());
             ExprVariant::Abstract(x, x_tp, t)
         },
         Rule::expr_bind => {
+            pairs.next();
             let x = pairs.next().unwrap().as_str().to_owned();
             let x_tp = parse_expr(pairs.next().unwrap());
             let x_val = parse_expr(pairs.next().unwrap());
+            pairs.next();
             let t = parse_expr(pairs.next().unwrap());
             ExprVariant::Bind(x, x_tp, x_val, t)
         },
