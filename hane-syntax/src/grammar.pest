@@ -4,7 +4,8 @@ command_definition = { keyword_definition ~ ident ~ ":" ~ expr ~ ":=" ~ expr ~ "
 command_axiom = { keyword_axiom ~ ident ~ ":" ~ expr ~ "." }
 
 expr = { expr_inner+ }
-expr_inner = _{ expr_prop | expr_var | expr_product | expr_abstract | expr_bind | "(" ~ expr ~ ")" }
+expr_inner = _{ expr_paren | expr_prop | expr_var | expr_product | expr_abstract | expr_bind }
+expr_paren = { "(" ~ expr ~ ")" }
 expr_prop = { keyword_prop }
 expr_var = { ident }
 expr_product = { keyword_forall ~ ident ~ ":" ~ expr ~ "," ~ expr }

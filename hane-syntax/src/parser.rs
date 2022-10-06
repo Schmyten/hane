@@ -59,24 +59,21 @@ pub fn parse_command(pair: Pair) -> Command {
 fn parse_expr(pair: Pair) -> Expr {
     debug_assert!(pair.as_rule() == Rule::expr, "Unexpected rule: {:?}", pair.as_rule());
     let mut exprs = pair.into_inner().map(parse_expr_inner);
-    let f = exprs.next().unwrap();
-    exprs.fold(f, |f, v|
+    let (f_span, f) = exprs.next().unwrap();
+    exprs.fold(f, |f, (v_span, v)|
         Expr {
-            span: Span { start: f.span.start, end: v.span.end },
+            span: Span { start: f_span.start, end: v_span.end },
             variant: Box::new(ExprVariant::App(f, v)),
         }
     )
 }
 
-fn parse_expr_inner(pair: Pair) -> Expr {
-    if pair.as_rule() == Rule::expr {
-        return parse_expr(pair);
-    }
-
+fn parse_expr_inner(pair: Pair) -> (Span, Expr) {
     let span = Span::from_pest(pair.as_span());
     let rule = pair.as_rule();
     let mut pairs = pair.into_inner();
     let variant = match rule {
+        Rule::expr_paren => return (span, parse_expr(pairs.next().unwrap())),
         Rule::expr_prop => ExprVariant::Prop,
         Rule::expr_var => ExprVariant::Var(pairs.next().unwrap().as_str().to_owned()),
         Rule::expr_product => {
@@ -104,5 +101,5 @@ fn parse_expr_inner(pair: Pair) -> Expr {
         },
         r => unreachable!("{:?}", r),
     };
-    Expr { span, variant: Box::new(variant) }
+    (span.clone(), Expr { span, variant: Box::new(variant) })
 }
