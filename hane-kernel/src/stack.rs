@@ -46,3 +46,9 @@ impl<T> IntoIterator for Stack<T> {
         self.0.into_iter().rev()
     }
 }
+
+impl<T> FromIterator<T> for Stack<T> {
+    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
+        Stack(Vec::from_iter(iter))
+    }
+}

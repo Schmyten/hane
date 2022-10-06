@@ -5,22 +5,62 @@ use crate::global::Global;
 use crate::stack::Stack;
 
 #[derive(Clone)]
-pub enum Term<B> {
+pub struct Term<M, B> {
+    pub meta: M,
+    pub variant: Box<TermVariant<M, B>>,
+}
+
+#[derive(Clone)]
+pub enum TermVariant<M, B> {
     Prop,
     Var(usize),
     Const(String),
-    App(Box<Term<B>>, Box<Term<B>>),
-    Product(B, Box<Term<B>>, Box<Term<B>>),
-    Abstract(B, Box<Term<B>>, Box<Term<B>>),
-    Bind(B, Box<Term<B>>, Box<Term<B>>, Box<Term<B>>),
+    App(Term<M, B>, Term<M, B>),
+    Product(B, Term<M, B>, Term<M, B>),
+    Abstract(B, Term<M, B>, Term<M, B>),
+    Bind(B, Term<M, B>, Term<M, B>, Term<M, B>),
 }
 
-pub struct LEntry<B> {
-    value: Option<Term<B>>,
-    ttype: Term<B>,
+pub struct LEntry<M, B> {
+    value: Option<Term<M, B>>,
+    ttype: Term<M, B>,
 }
 
-impl<B> PartialEq for Term<B> {
+pub struct TypeError<M, B> {
+    bindings: Vec<B>,
+    pub variant: TypeErrorVariant<M, B>,
+}
+
+pub enum TypeErrorVariant<M, B> {
+    IncompatibleTypes(Term<M, B>, Term<M, B>),
+    NotAProduct(Term<M, B>),
+    NotASort(Term<M, B>),
+    DebruijnOutOfScope(usize),
+    UndefinedConst(String),
+}
+
+impl<M, B> TypeError<M, B> {
+    pub fn new(variant: TypeErrorVariant<M, B>) -> Self {
+        TypeError { bindings: Vec::new(), variant }
+    }
+
+    pub fn bind(mut self, bind: B) -> Self {
+        self.bindings.push(bind);
+        self
+    }
+
+    pub fn bindings(&self) -> Stack<B> where B: Clone {
+        self.bindings.iter().rev().cloned().collect()
+    }
+}
+
+impl<M, B> PartialEq for Term<M, B> {
+    fn eq(&self, other: &Self) -> bool {
+        self.variant == other.variant
+    }
+}
+
+impl<M, B> PartialEq for TermVariant<M, B> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Var(l0), Self::Var(r0)) => l0 == r0,
@@ -34,133 +74,151 @@ impl<B> PartialEq for Term<B> {
     }
 }
 
-impl<B> Eq for Term<B> {}
+impl<M, B> Eq for Term<M, B> {}
+impl<M, B> Eq for TermVariant<M, B> {}
 
-impl<B> Display for Term<B> {
+impl<M, B> Display for TermVariant<M, B> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Term::Prop => write!(f, "Prop"),
-            Term::Var(n) => write!(f, "'{}", n),
-            Term::Const(name) => write!(f, "{}", name),
-            Term::App(t1, t2) => write!(f, "({}) ({})", t1, t2),
-            Term::Product(_, t1, t2) => write!(f, "forall[{}] ({})", t1, t2),
-            Term::Abstract(_, t1, t2) =>  write!(f, "fun[{}] ({})", t1, t2),
-            Term::Bind(_, t1, t2, t3) => write!(f, "let[{} : {}] ({})", t1, t2, t3),
+            TermVariant::Prop => write!(f, "Prop"),
+            TermVariant::Var(n) => write!(f, "'{}", n),
+            TermVariant::Const(name) => write!(f, "{}", name),
+            TermVariant::App(t1, t2) => write!(f, "({}) ({})", t1, t2),
+            TermVariant::Product(_, t1, t2) => write!(f, "forall[{}] ({})", t1, t2),
+            TermVariant::Abstract(_, t1, t2) =>  write!(f, "fun[{}] ({})", t1, t2),
+            TermVariant::Bind(_, t1, t2, t3) => write!(f, "let[{} : {}] ({})", t1, t2, t3),
         }
     }
 }
 
-impl<B: Clone> Term<B> {
+impl<M, B> Display for Term<M, B> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.variant)
+    }
+}
+
+impl<M: Clone, B: Clone> TermVariant<M, B> {
+    fn push_inner(&self, cut: usize, amount: usize) -> Self {
+        match self {
+            TermVariant::Prop => TermVariant::Prop,
+            TermVariant::Var(n) => TermVariant::Var(if cut <= *n { *n + amount } else { *n }),
+            TermVariant::Const(name) => TermVariant::Const(name.to_owned()),
+            TermVariant::App(f, v) => TermVariant::App(f.push_inner(cut, amount), v.push_inner(cut, amount)),
+            TermVariant::Product(x, x_tp, t) => TermVariant::Product(x.clone(), x_tp.push_inner(cut, amount), t.push_inner(cut+1, amount)),
+            TermVariant::Abstract(x, x_tp, t) => TermVariant::Abstract(x.clone(), x_tp.push_inner(cut, amount), t.push_inner(cut+1, amount)),
+            TermVariant::Bind(x, x_tp, x_val, t) => TermVariant::Bind(x.clone(), x_tp.push_inner(cut, amount), x_val.push_inner(cut, amount), t.push_inner(cut+1, amount)),
+        }
+    }
+}
+
+impl<M: Clone, B: Clone> Term<M, B> {
     //TODO: Find a more descriptive name
     pub fn push(&self, amount: usize) -> Self {
         self.push_inner(0, amount)
     }
     
     fn push_inner(&self, cut: usize, amount: usize) -> Self {
-        match self {
-            Term::Prop => Term::Prop,
-            Term::Var(n) => Term::Var(if cut <= *n { *n + amount } else { *n }),
-            Term::Const(name) => Term::Const(name.to_owned()),
-            Term::App(f, v) => Term::App(Box::new(f.push_inner(cut, amount)), Box::new(v.push_inner(cut, amount))),
-            Term::Product(x, x_tp, t) => Term::Product(x.clone(), Box::new(x_tp.push_inner(cut, amount)), Box::new(t.push_inner(cut+1, amount))),
-            Term::Abstract(x, x_tp, t) => Term::Abstract(x.clone(), Box::new(x_tp.push_inner(cut, amount)), Box::new(t.push_inner(cut+1, amount))),
-            Term::Bind(x, x_tp, x_val, t) => Term::Bind(x.clone(), Box::new(x_tp.push_inner(cut, amount)), Box::new(x_val.push_inner(cut, amount)), Box::new(t.push_inner(cut+1, amount))),
+        Term {
+            meta: self.meta.clone(),
+            variant: Box::new(self.variant.push_inner(cut, amount)),
         }
     }
 
-    pub fn subst(&self, mut f: impl FnMut(usize, usize) -> Self) -> Self {
+    pub fn subst(&self, mut f: impl FnMut(&M, usize, usize) -> Self) -> Self {
         self.subst_inner(0, &mut f)
     }
     
-    fn subst_inner(&self, push: usize, f: &mut impl FnMut(usize, usize) -> Self) -> Self {
-        match self {
-            Term::Prop => Term::Prop,
-            Term::Var(n) => f(*n, push),
-            Term::Const(name) => Term::Const(name.to_owned()),
-            Term::App(t, v) => Term::App(Box::new(t.subst_inner(push, f)), Box::new(v.subst_inner(push, f))),
-            Term::Product(x, x_tp, t) => Term::Product(x.clone(), Box::new(x_tp.subst_inner(push, f)), Box::new(t.subst_inner(push+1, f))),
-            Term::Abstract(x, x_tp, t) => Term::Abstract(x.clone(), Box::new(x_tp.subst_inner(push, f)), Box::new(t.subst_inner(push+1, f))),
-            Term::Bind(x, x_tp, x_val, t) => Term::Bind(x.clone(), Box::new(x_tp.subst_inner(push, f)), Box::new(x_val.subst_inner(push, f)), Box::new(t.subst_inner(push+1, f))),
-        }
+    fn subst_inner(&self, push: usize, f: &mut impl FnMut(&M, usize, usize) -> Self) -> Self {
+        let variant = match &*self.variant {
+            TermVariant::Prop => TermVariant::Prop,
+            TermVariant::Var(n) => return f(&self.meta, *n, push),
+            TermVariant::Const(name) => TermVariant::Const(name.to_owned()),
+            TermVariant::App(t, v) => TermVariant::App(t.subst_inner(push, f), v.subst_inner(push, f)),
+            TermVariant::Product(x, x_tp, t) => TermVariant::Product(x.clone(), x_tp.subst_inner(push, f), t.subst_inner(push+1, f)),
+            TermVariant::Abstract(x, x_tp, t) => TermVariant::Abstract(x.clone(), x_tp.subst_inner(push, f), t.subst_inner(push+1, f)),
+            TermVariant::Bind(x, x_tp, x_val, t) => TermVariant::Bind(x.clone(), x_tp.subst_inner(push, f), x_val.subst_inner(push, f), t.subst_inner(push+1, f)),
+        };
+        Term { meta: self.meta.clone(), variant: Box::new(variant) }
     }
 
-    pub fn try_subst<E>(&self, mut f: impl FnMut(usize, usize) -> Result<Self, E>) -> Result<Self, E> {
+    pub fn try_subst<E>(&self, mut f: impl FnMut(&M, usize, usize) -> Result<Self, E>) -> Result<Self, E> {
         self.try_subst_inner(0, &mut f)
     }
     
-    fn try_subst_inner<E>(&self, push: usize, f: &mut impl FnMut(usize, usize) -> Result<Self, E>) -> Result<Self, E> {
-        Ok(match self {
-            Term::Prop => Term::Prop,
-            Term::Var(n) => f(*n, push)?,
-            Term::Const(name) => Term::Const(name.to_owned()),
-            Term::App(t, v) => Term::App(Box::new(t.try_subst_inner(push, f)?), Box::new(v.try_subst_inner(push, f)?)),
-            Term::Product(x, x_tp, t) => Term::Product(x.clone(), Box::new(x_tp.try_subst_inner(push, f)?), Box::new(t.try_subst_inner(push+1, f)?)),
-            Term::Abstract(x, x_tp, t) => Term::Abstract(x.clone(), Box::new(x_tp.try_subst_inner(push, f)?), Box::new(t.try_subst_inner(push+1, f)?)),
-            Term::Bind(x, x_tp, x_val, t) => Term::Bind(x.clone(), Box::new(x_tp.try_subst_inner(push, f)?), Box::new(x_val.try_subst_inner(push, f)?), Box::new(t.try_subst_inner(push+1, f)?)),
-        })
+    fn try_subst_inner<E>(&self, push: usize, f: &mut impl FnMut(&M, usize, usize) -> Result<Self, E>) -> Result<Self, E> {
+        let variant = match &*self.variant {
+            TermVariant::Prop => TermVariant::Prop,
+            TermVariant::Var(n) => return f(&self.meta, *n, push),
+            TermVariant::Const(name) => TermVariant::Const(name.to_owned()),
+            TermVariant::App(t, v) => TermVariant::App(t.try_subst_inner(push, f)?, v.try_subst_inner(push, f)?),
+            TermVariant::Product(x, x_tp, t) => TermVariant::Product(x.clone(), x_tp.try_subst_inner(push, f)?, t.try_subst_inner(push+1, f)?),
+            TermVariant::Abstract(x, x_tp, t) => TermVariant::Abstract(x.clone(), x_tp.try_subst_inner(push, f)?, t.try_subst_inner(push+1, f)?),
+            TermVariant::Bind(x, x_tp, x_val, t) => TermVariant::Bind(x.clone(), x_tp.try_subst_inner(push, f)?, x_val.try_subst_inner(push, f)?, t.try_subst_inner(push+1, f)?),
+        };
+        Ok(Term { meta: self.meta.clone(), variant: Box::new(variant) })
     }
 
     pub fn subst_single(&self, n: usize, val: &Self) -> Self {
-        self.subst(|x, push| {
+        self.subst(|meta, x, push| {
             match (n + push).cmp(&x) {
-                Ordering::Less => Term::Var(x - 1),
+                Ordering::Less => Term { meta: meta.clone(), variant: Box::new(TermVariant::Var(x - 1)) },
                 Ordering::Equal => val.push(push),
-                Ordering::Greater => Term::Var(x),
+                Ordering::Greater => Term { meta: meta.clone(), variant: Box::new(TermVariant::Var(x)) },
             }
         })
     }
 
     pub fn pop(&self, n: usize) -> Option<Self> {
-        self.try_subst(|x, push|
+        self.try_subst(|meta, x, push|
             match (n + push).cmp(&x) {
-                Ordering::Less => Ok(Term::Var(x - 1)),
+                Ordering::Less => Ok(Term { meta: meta.clone(), variant: Box::new(TermVariant::Var(x - 1)) }),
                 Ordering::Equal => Err(()),
-                Ordering::Greater => Ok(Term::Var(x)),
+                Ordering::Greater => Ok(Term { meta: meta.clone(), variant: Box::new(TermVariant::Var(x)) }),
             }
         ).ok()
     }
 
-    pub fn normalize(&mut self, global: &Global<B>, lenv: &mut Stack<LEntry<B>>) {
+    pub fn normalize(&mut self, global: &Global<M, B>, lenv: &mut Stack<LEntry<M, B>>) {
         loop {
-            match self {
-                Term::Prop => break,
-                Term::Var(n) => {
+            match &mut *self.variant {
+                TermVariant::Prop => break,
+                TermVariant::Var(n) => {
                     // δ reduction
                     if let Some(value) = &lenv.get(*n).unwrap().value {
                         *self = value.push(*n);
                         continue;
                     }
                 },
-                Term::Const(name) => {
+                TermVariant::Const(name) => {
                     // δ reduction
                     if let Some(value) = global.get(name).unwrap().0 {
                         *self = value.push(lenv.len());
                         continue;
                     }
                 }
-                Term::App(f, v) => {
+                TermVariant::App(f, v) => {
                     f.normalize(global, lenv);
                     v.normalize(global, lenv);
 
                     // β reduction
-                    if let Term::Abstract(_, _, t) = &**f {
+                    if let TermVariant::Abstract(_, _, t) = &*f.variant {
                         *self = t.subst_single(0, v);
                         continue;
                     }
                 },
-                Term::Product(_name, input_type, output_type) => {
+                TermVariant::Product(_name, input_type, output_type) => {
                     input_type.normalize(global, lenv);
-                    lenv.push(LEntry { value: None, ttype: (&**input_type).clone() });
+                    lenv.push(LEntry { value: None, ttype: input_type.clone() });
                     output_type.normalize(global, lenv);
                     lenv.pop();
                 },
-                Term::Abstract(_name, input_type, body) => {
+                TermVariant::Abstract(_name, input_type, body) => {
                     input_type.normalize(global, lenv);
-                    lenv.push(LEntry { value: None, ttype: (&**input_type).clone() });
+                    lenv.push(LEntry { value: None, ttype: input_type.clone() });
                     body.normalize(global, lenv);
                     lenv.pop();
                 },
-                Term::Bind(_name, _type, val, t) => {
+                TermVariant::Bind(_name, _type, val, t) => {
                     val.normalize(global, lenv);
                     // ζ reduction (Remove let binding)
                     *self = t.subst_single(0, val);
@@ -172,28 +230,28 @@ impl<B: Clone> Term<B> {
     }
 
     fn eta(&mut self) {
-        match self {
-            Term::Prop => {},
-            Term::Var(_) => {},
-            Term::Const(_) => {},
-            Term::App(f, v) => {
+        match &mut *self.variant {
+            TermVariant::Prop => {},
+            TermVariant::Var(_) => {},
+            TermVariant::Const(_) => {},
+            TermVariant::App(f, v) => {
                 f.eta();
                 v.eta();
             },
-            Term::Product(_, input_type, output_type) => {
+            TermVariant::Product(_, input_type, output_type) => {
                 input_type.eta();
                 output_type.eta();
             },
-            Term::Abstract(_, input_type, body) => {
+            TermVariant::Abstract(_, input_type, body) => {
                 input_type.eta();
                 body.eta();
             },
-            Term::Bind(_, _, _, _) => unreachable!(),
+            TermVariant::Bind(_, _, _, _) => unreachable!(),
         }
 
-        if let Term::Abstract(_, _, body) = self {
-            if let Term::App(f, v) = &**body {
-                if let Term::Var(0) = &**v {
+        if let TermVariant::Abstract(_, _, body) = &*self.variant {
+            if let TermVariant::App(f, v) = &*body.variant {
+                if let TermVariant::Var(0) = &*v.variant {
                     if let Some(f) = f.pop(0) {
                         *self = f;
                     }
@@ -202,7 +260,7 @@ impl<B: Clone> Term<B> {
         }
     }
 
-    pub fn convertable(&self, other: &Self, global: &Global<B>, lenv: &mut Stack<LEntry<B>>) -> bool {
+    pub fn convertable(&self, other: &Self, global: &Global<M, B>, lenv: &mut Stack<LEntry<M, B>>) -> bool {
         let mut this = self.clone();
         let mut other = other.clone();
         this.normalize(global, lenv);
@@ -212,66 +270,73 @@ impl<B: Clone> Term<B> {
         this == other
     }
 
-    pub fn is_sort(&self, global: &Global<B>, lenv: &mut Stack<LEntry<B>>) -> bool {
-        let mut t = self.clone();
-        t.normalize(global, lenv);
-        if let Term::Prop = t { true } else { false }
+    pub fn expect_convertable(&self, other: &Self, global: &Global<M, B>, lenv: &mut Stack<LEntry<M, B>>) -> Result<(), TypeError<M, B>> {
+        self.convertable(other, global, lenv).then(||()).ok_or_else(||TypeError::new(TypeErrorVariant::IncompatibleTypes(other.clone(), self.clone())))
     }
 
-    pub fn type_check(&self, global: &Global<B>, lenv: &mut Stack<LEntry<B>>) -> Option<Self> {
-        match self {
-            Term::Prop => Some(Term::Prop),
-            Term::Var(n) => lenv.get(*n).map(|e|e.ttype.push(*n)),
-            Term::Const(name) => global.get(name).map(|(_, ttype)|ttype.push(lenv.len())),
-            Term::App(f, v) => {
-                let mut f_tp = f.type_check(global, lenv)?;
+    pub fn is_sort(&self, global: &Global<M, B>, lenv: &mut Stack<LEntry<M, B>>) -> bool {
+        let mut t = self.clone();
+        t.normalize(global, lenv);
+        if let TermVariant::Prop = *t.variant { true } else { false }
+    }
+
+    pub fn expect_sort(&self, global: &Global<M, B>, lenv: &mut Stack<LEntry<M, B>>) -> Result<(), TypeError<M, B>> {
+        let mut t = self.clone();
+        t.normalize(global, lenv);
+        if let TermVariant::Prop = *t.variant { Ok(()) } else { Err(TypeError::new(TypeErrorVariant::NotASort(self.clone()))) }
+    }
+
+    pub fn expect_product(mut self, global: &Global<M, B>, lenv: &mut Stack<LEntry<M, B>>) -> Result<(Self, Self), TypeError<M, B>> {
+        self.normalize(global, lenv);
+        if let TermVariant::Product(_, input_type, output_type) = *self.variant {
+            Ok((input_type, output_type))
+        } else {
+            Err(TypeError::new(TypeErrorVariant::NotASort(self)))
+        }
+    }
+
+    pub fn type_check(&self, global: &Global<M, B>, lenv: &mut Stack<LEntry<M, B>>) -> Result<Self, (M, TypeError<M, B>)> {
+        Ok(match &*self.variant {
+            TermVariant::Prop => Term { meta: self.meta.clone(), variant: Box::new(TermVariant::Prop) },
+            TermVariant::Var(n) => return lenv.get(*n).map(|e|e.ttype.push(*n)).ok_or_else(||(self.meta.clone(), TypeError::new(TypeErrorVariant::DebruijnOutOfScope(*n)))),
+            TermVariant::Const(name) => return global.get(name).map(|(_, ttype)|ttype.push(lenv.len())).ok_or_else(||(self.meta.clone(), TypeError::new(TypeErrorVariant::UndefinedConst(name.clone())))),
+            TermVariant::App(f, v) => {
+                let f_tp = f.type_check(global, lenv)?;
+                let (input_type, output_type) = f_tp.expect_product(global, lenv).map_err(|err|(f.meta.clone(), err))?;
                 let v_tp = v.type_check(global, lenv)?;
-                f_tp.normalize(global, lenv);
-                if let Term::Product(_, input_tp, output_tp) = f_tp {
-                    if input_tp.convertable(&v_tp, global, lenv) {
-                        Some(output_tp.subst_single(0, v))
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
+                v_tp.expect_convertable(&input_type, global, lenv).map_err(|err|(self.meta.clone(), err))?;
+                output_type.subst_single(0, v)
             },
-            Term::Product(_, x_tp, t) => {
+            TermVariant::Product(x, x_tp, t) => {
                 let x_sort = x_tp.type_check(global, lenv)?;
-                lenv.push(LEntry { value: None, ttype: (&**x_tp).clone() });
+                x_sort.expect_sort(global, lenv).map_err(|err|(x_tp.meta.clone(), err))?;
+                lenv.push(LEntry { value: None, ttype: x_tp.clone() });
                 let t_tp = t.type_check(global, lenv);
                 lenv.pop();
-                let t_tp = t_tp?;
-                if x_sort.is_sort(global, lenv) && t_tp.is_sort(global, lenv) {
-                    Some(Term::Prop)
-                } else {
-                    None
-                }
+                let t_tp = t_tp.map_err(|(meta, err)|(meta, err.bind(x.clone())))?;
+                t_tp.expect_sort(global, lenv).map_err(|err|(t.meta.clone(), err))?;
+                Term { meta: self.meta.clone(), variant: Box::new(TermVariant::Prop) }
             },
-            Term::Abstract(x, x_tp, t) => {
+            TermVariant::Abstract(x, x_tp, t) => {
                 let x_sort = x_tp.type_check(global, lenv)?;
-                lenv.push(LEntry { value: None, ttype: (&**x_tp).clone() });
+                x_sort.expect_sort(global, lenv).map_err(|err|(x_tp.meta.clone(), err))?;
+                lenv.push(LEntry { value: None, ttype: x_tp.clone() });
                 let t_tp = t.type_check(global, lenv);
                 lenv.pop();
-                let t_tp = t_tp?;
-                if x_sort.is_sort(global, lenv) {
-                    Some(Term::Product(x.clone(), x_tp.clone(), Box::new(t_tp)))
-                } else {
-                    None
-                }
+                let t_tp = t_tp.map_err(|(meta, err)|(meta, err.bind(x.clone())))?;
+                Term { meta: self.meta.clone(), variant: Box::new(TermVariant::Product(x.clone(), x_tp.clone(), t_tp)) }
             },
-            Term::Bind(_, x_tp, x_val, t) => {
+            TermVariant::Bind(x, x_tp, x_val, t) => {
                 let x_sort = x_tp.type_check(global, lenv)?;
-                if let Term::Prop = x_sort {} else { return None }
+                x_sort.expect_sort(global, lenv).map_err(|err|(x_tp.meta.clone(), err))?;
                 let x_val_tp = x_val.type_check(global, lenv)?;
-                if !x_tp.convertable(&x_val_tp, global, lenv) { return None }
+                x_val_tp.expect_convertable(x_tp, global, lenv).map_err(|err|(x_val.meta.clone(), err))?;
                 let t_subst = t.subst_single(0, x_val);
-                lenv.push(LEntry { value: None, ttype: (&**x_tp).clone() });
+                lenv.push(LEntry { value: None, ttype: x_tp.clone() });
                 let t_tp = t_subst.type_check(global, lenv);
                 lenv.pop();
-                t_tp
+                t_tp.map_err(|(meta, err)|(meta, err.bind(x.clone())))?
             },
-        }
+        })
     }
 }

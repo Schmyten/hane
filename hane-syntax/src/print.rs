@@ -1,8 +1,8 @@
 use std::fmt::{self, Write};
 
-use hane_kernel::stack::Stack;
+use hane_kernel::{stack::Stack, term::TermVariant};
 
-type Term = hane_kernel::term::Term<String>;
+type Term<M> = hane_kernel::term::Term<M, String>;
 
 fn fresh(x: &String, names: &Stack<String>) -> String {
     if !names.contains(x) {
@@ -19,14 +19,14 @@ fn fresh(x: &String, names: &Stack<String>) -> String {
     unreachable!()
 }
 
-pub fn write_term(buf: &mut impl Write, term: &Term, names: &mut Stack<String>, level: usize) -> fmt::Result {
-    match term {
-        Term::Prop => write!(buf, "Prop"),
-        Term::Var(n) =>
+pub fn write_term<M>(buf: &mut impl Write, term: &Term<M>, names: &mut Stack<String>, level: usize) -> fmt::Result {
+    match &*term.variant {
+        TermVariant::Prop => write!(buf, "Prop"),
+        TermVariant::Var(n) =>
             if let Some(x) = names.get(*n) { write!(buf, "{}", x) }
             else { write!(buf, "?:{}", n - names.len()) },
-        Term::Const(name) => write!(buf, "{name}"),
-        Term::App(f, v) => {
+        TermVariant::Const(name) => write!(buf, "{name}"),
+        TermVariant::App(f, v) => {
             if level < 10 { write!(buf, "(")?; }
             write_term(buf, f, names, 10)?;
             write!(buf, " ")?;
@@ -34,7 +34,7 @@ pub fn write_term(buf: &mut impl Write, term: &Term, names: &mut Stack<String>, 
             if level < 10 { write!(buf, ")")?; }
             Ok(())
         },
-        Term::Product(x, x_tp, t) => {
+        TermVariant::Product(x, x_tp, t) => {
             let x = fresh(x, names);
             if level < 200 { write!(buf, "(")?; }
             write!(buf, "forall {x} : ")?;
@@ -47,7 +47,7 @@ pub fn write_term(buf: &mut impl Write, term: &Term, names: &mut Stack<String>, 
             if level < 200 { write!(buf, ")")?; }
             Ok(())
         },
-        Term::Abstract(x, x_tp, t) => {
+        TermVariant::Abstract(x, x_tp, t) => {
             let x = fresh(x, names);
             if level < 200 { write!(buf, "(")?; }
             write!(buf, "fun {x} : ")?;
@@ -60,7 +60,7 @@ pub fn write_term(buf: &mut impl Write, term: &Term, names: &mut Stack<String>, 
             if level < 200 { write!(buf, ")")?; }
             Ok(())
         },
-        Term::Bind(x, x_tp, x_val, t) => {
+        TermVariant::Bind(x, x_tp, x_val, t) => {
             let x = fresh(x, names);
             if level < 200 { write!(buf, "(")?; }
             write!(buf, "let {x} : ")?;
@@ -78,7 +78,7 @@ pub fn write_term(buf: &mut impl Write, term: &Term, names: &mut Stack<String>, 
     }
 }
 
-pub fn print_term(term: &Term, names: &mut Stack<String>, level: usize) -> String {
+pub fn print_term<M>(term: &Term<M>, names: &mut Stack<String>, level: usize) -> String {
     let mut buf = String::new();
     write_term(&mut buf, term, names, level).unwrap();
     buf

@@ -1,45 +1,46 @@
 use std::fmt::{self, Display, Formatter};
 
-use crate::{term::Term, stack::Stack};
+use crate::{term::{Term, TypeError}, stack::Stack};
 
 #[derive(Default)]
-pub struct Global<B> {
-    env: Vec<GEntry<B>>,
+pub struct Global<M, B> {
+    env: Vec<(M, GEntry<M, B>)>,
 }
 
-impl<B> Display for Global<B> {
+enum GEntry<M, B> {
+    Definition(String, Term<M, B>, Term<M, B>),
+    Axiom(String, Term<M, B>),
+}
+
+pub enum CommandError<M, B> {
+    NameAlreadyExists(String),
+    TypeError(TypeError<M, B>),
+}
+
+impl<M, B> Display for Global<M, B> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        for entry in &self.env {
-            match entry {
-                GEntry::Definition(name, ttype, value) =>
-                    writeln!(f, "Definition {name} : {ttype} := {value}.")?,
-                GEntry::Axiom(name, ttype) =>
-                    writeln!(f, "Axiom {name} : {ttype}.")?,
-            }
-        }
-        Ok(())
+        self.env.iter().try_for_each(|(_, entry)|writeln!(f, "{entry}"))
     }
 }
 
-enum GEntry<B> {
-    Definition(String, Term<B>, Term<B>),
-    Axiom(String, Term<B>),
+impl<M, B> Display for GEntry<M, B> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            GEntry::Definition(name, ttype, value) =>
+                write!(f, "Definition {name} : {ttype} := {value}."),
+            GEntry::Axiom(name, ttype) =>
+                write!(f, "Axiom {name} : {ttype}."),
+        }
+    }
 }
 
-pub enum CommandError<B> {
-    NameAlreadyExists(String),
-    TypeError,
-    IncompatibleType(Term<B>, Term<B>),
-    ExpectedSort(Term<B>, Term<B>),
-}
-
-impl<B: Clone> Global<B> {
+impl<M: Clone, B: Clone> Global<M, B> {
     pub fn new() -> Self {
         Global { env: Vec::new() }
     }
 
-    pub fn free(&self, name: &str) -> Result<(), CommandError<B>> {
-        let free = self.env.iter().all(|entry|
+    pub fn free(&self, name: &str) -> Result<(), CommandError<M, B>> {
+        let free = self.env.iter().all(|(_, entry)|
             match entry {
                 GEntry::Definition(x, _, _) => x != name,
                 GEntry::Axiom(x, _) => x != name,
@@ -48,8 +49,8 @@ impl<B: Clone> Global<B> {
         if free { Ok(()) } else { Err(CommandError::NameAlreadyExists(name.to_owned())) }
     }
 
-    pub fn get(&self, name: &str) -> Option<(Option<&Term<B>>, &Term<B>)> {
-        self.env.iter().find_map(|entry|
+    pub fn get(&self, name: &str) -> Option<(Option<&Term<M, B>>, &Term<M, B>)> {
+        self.env.iter().find_map(|(_, entry)|
             match entry {
                 GEntry::Definition(x, ttype, value) => (x == name).then(||(Some(value), ttype)),
                 GEntry::Axiom(x, ttype) => (x == name).then(||(None, ttype)),
@@ -57,25 +58,26 @@ impl<B: Clone> Global<B> {
         )
     }
 
-    pub fn definition(&mut self, name: String, ttype: Term<B>, value: Term<B>) -> Result<(), CommandError<B>> {
-        self.free(&name)?;
+    pub fn definition(&mut self, meta: M, name: String, ttype: Term<M, B>, value: Term<M, B>) -> Result<(), (M, CommandError<M, B>)> {
+        self.free(&name).map_err(|err|(meta.clone(), err))?;
         let mut lenv = Stack::new();
-        let value_type = value.type_check(self, &mut lenv).ok_or(CommandError::TypeError)?;
-        if !value_type.convertable(&ttype, self, &mut lenv) {
-            return Err(CommandError::IncompatibleType(ttype, value_type));
-        }
-        self.env.push(GEntry::Definition(name, ttype, value));
+        let sort = ttype.type_check(self, &mut lenv)
+            .map_err(|(meta, err)|(meta, CommandError::TypeError(err)))?;
+        sort.expect_sort(self, &mut lenv).map_err(|err|(ttype.meta.clone(), CommandError::TypeError(err)))?;
+        let value_type = value.type_check(self, &mut lenv)
+            .map_err(|(meta, err)|(meta, CommandError::TypeError(err)))?;
+        value_type.expect_convertable(&ttype, self, &mut lenv).map_err(|err|(value.meta.clone(), CommandError::TypeError(err)))?;
+        self.env.push((meta, GEntry::Definition(name, ttype, value)));
         Ok(())
     }
 
-    pub fn axiom(&mut self, name: String, ttype: Term<B>) -> Result<(), CommandError<B>> {
-        self.free(&name)?;
+    pub fn axiom(&mut self, meta: M, name: String, ttype: Term<M, B>) -> Result<(), (M, CommandError<M, B>)> {
+        self.free(&name).map_err(|err|(meta.clone(), err))?;
         let mut lenv = Stack::new();
-        let sort = ttype.type_check(self, &mut lenv).ok_or(CommandError::TypeError)?;
-        if !sort.is_sort(self, &mut lenv) {
-            return Err(CommandError::ExpectedSort(ttype, sort));
-        }
-        self.env.push(GEntry::Axiom(name, ttype));
+        let sort = ttype.type_check(self, &mut lenv)
+            .map_err(|(meta, err)|(meta, CommandError::TypeError(err)))?;
+        sort.expect_sort(self, &mut lenv).map_err(|err|(ttype.meta.clone(), CommandError::TypeError(err)))?;
+        self.env.push((meta, GEntry::Axiom(name, ttype)));
         Ok(())
     }
 }
