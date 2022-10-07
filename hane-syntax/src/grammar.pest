@@ -2,7 +2,7 @@ commands = _{ SOI ~ command* ~ EOI }
 command = _{ command_definition | command_axiom }
 command_definition = {
     keyword_definition ~ ident ~ ":" ~ expr ~ ":=" ~ expr ~ "."
-    }
+}
 command_axiom = { keyword_axiom ~ ident ~ ":" ~ expr ~ "." }
 
 expr = { expr_inner+ }
