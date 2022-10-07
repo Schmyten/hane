@@ -1,34 +1,42 @@
 use hane_kernel::global::Global;
 use hane_syntax::parser::parse;
-use std::fs::{read_dir, read_to_string};
+use std::fs::read_to_string;
 use std::path::Path;
 
 fn main() {
     let mut tests = 0;
     let mut failed = 0;
 
-    for test in read_dir("tests").unwrap() {
-        let test = test.unwrap();
-        if !test.file_type().unwrap().is_file() {
-            continue;
-        }
-        let fullname = test.file_name();
-        let fullname = fullname.to_str().unwrap();
-        if !fullname.ends_with(".v") {
-            continue;
-        }
-        let name = &fullname[..fullname.len() - 2];
-        let path = test.path();
-        let path = path.to_str().unwrap();
-
+    for (name, file) in walkdir::WalkDir::new("tests")
+        .into_iter()
+        .filter_map(|f| f.ok())
+        .filter(|f| f.file_type().is_file())
+        .map(|f| (f.file_name().to_string_lossy().into_owned(), f))
+        .filter(|(name, _)| name.ends_with(".v"))
+    {
         tests += 1;
 
-        let content = read_to_string(path).unwrap();
+        let name = &name[..name.len() - 2];
+
+        let path = file.path();
+
+        let parse_err_path = {
+            let mut path = path.to_path_buf();
+            assert!(path.pop());
+            path.push(format!("{name}.parse.err"));
+            path
+        };
+
+        let content =
+            read_to_string(path).expect(&format!("valid utf-8 in {}", path.to_string_lossy()));
+
         let parse_result = parse(&content);
 
-        let parse_err = format!("tests/{}.parse.err", name);
-        if Path::new(&parse_err).exists() {
-            let parse_err = read_to_string(parse_err).unwrap();
+        if parse_err_path.exists() {
+            let parse_err = read_to_string(&parse_err_path).expect(&format!(
+                "valid utf-8 in {}",
+                parse_err_path.to_string_lossy()
+            ));
             match parse_result {
                 Ok(_commands) => {
                     eprintln!("{name}: Expected a parsing error, but expresion passed succesfully");
@@ -36,7 +44,7 @@ fn main() {
                     continue;
                 }
                 Err(err) => {
-                    let err = err.print(path, &content);
+                    let err = err.print(path.to_string_lossy().as_ref(), &content);
                     if err != parse_err {
                         eprintln!("{name}: Parsing error does not match expected error");
                         eprintln!("expected:");
@@ -55,7 +63,7 @@ fn main() {
         let commands = match parse_result {
             Ok(commands) => commands,
             Err(err) => {
-                let err = err.print(path, &content);
+                let err = err.print(path.to_string_lossy().as_ref(), &content);
                 eprintln!("{name}: Failed to parse expresion");
                 eprintln!("```\n{err}\n```");
                 failed += 1;
@@ -68,9 +76,14 @@ fn main() {
             .into_iter()
             .try_for_each(|command| command.lower(&mut global));
 
-        let result_err = &format!("tests/{name}.err");
-        if Path::new(&result_err).exists() {
-            let result_err = read_to_string(result_err).unwrap();
+        let result_err_path = {
+            let mut path = path.to_path_buf();
+            assert!(path.pop());
+            path.push(format!("{name}.err"));
+            path
+        };
+        if result_err_path.exists() {
+            let result_err = read_to_string(&result_err_path).unwrap();
             match result {
                 Ok(_) => {
                     eprintln!("{name}: Expected an error, but test ran successfully");
@@ -79,7 +92,7 @@ fn main() {
                     continue;
                 }
                 Err(err) => {
-                    let err = err.print(path, &content);
+                    let err = err.print(path.to_string_lossy().as_ref(), &content);
                     if err != result_err {
                         eprintln!("{name}: Error does not match expected error");
                         eprintln!("expected:");
@@ -95,13 +108,18 @@ fn main() {
             continue;
         }
 
-        let result_out = format!("tests/{name}.out");
-        if !Path::new(&result_out).exists() {
+        let result_out = {
+            let mut path = path.to_path_buf();
+            assert!(path.pop());
+            path.push(format!("{name}.out"));
+            path
+        };
+        if !result_out.exists() {
             continue;
         }
 
         if let Err(err) = result {
-            let err = err.print(path, &content);
+            let err = err.print(path.to_string_lossy().as_ref(), &content);
             eprintln!("{name}: Failed with error:");
             eprintln!("```\n{err}\n```");
             failed += 1;

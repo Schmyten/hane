@@ -1,0 +1,6 @@
+ --> tests/nested/failparse1.v:1:1
+  |
+1 | Definitionx:Prop:=Prop
+  | ^
+  |
+  = parsing error: expected EOI, keyword_definition, or keyword_axiom

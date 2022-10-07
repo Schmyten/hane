@@ -11,3 +11,4 @@ edition = "2021"
 [dependencies]
 hane-kernel = { path="hane-kernel" }
 hane-syntax = { path="hane-syntax" }
+walkdir = "2.3.2"
