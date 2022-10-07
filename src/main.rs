@@ -87,7 +87,7 @@ fn main() {
             let lower_err = read_to_string(&lower_err_path).unwrap();
             match lower {
                 Ok(commands) => {
-                    eprintln!("{name}: Expected an error, but test ran successfully");
+                    eprintln!("{name}: Expected a lowering error, but test ran successfully");
                     eprintln!("```");
                     commands.iter().for_each(|command|eprintln!("{command}"));
                     eprintln!("```");
@@ -97,7 +97,7 @@ fn main() {
                 Err(err) => {
                     let err = err.print(path.to_string_lossy().as_ref(), &content);
                     if err != lower_err {
-                        eprintln!("{name}: Error does not match expected error");
+                        eprintln!("{name}: Lowering error does not match expected error");
                         eprintln!("expected:");
                         eprintln!("```\n{lower_err}\n```");
                         eprintln!("actual:");
