@@ -4,11 +4,15 @@ pub struct Stack<T>(Vec<T>);
 
 impl<T> Stack<T> {
     pub fn new() -> Self {
-        Stack(Vec::new())
+        Default::default()
     }
 
     pub fn len(&self) -> usize {
         self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.len() == 0
     }
 
     pub fn push(&mut self, value: T) {
@@ -28,12 +32,21 @@ impl<T> Stack<T> {
         }
     }
 
-    pub fn contains(&self, x: &T) -> bool where T: PartialEq {
+    pub fn contains(&self, x: &T) -> bool
+    where
+        T: PartialEq,
+    {
         self.0.contains(x)
     }
 
     pub fn iter(&self) -> Rev<std::slice::Iter<T>> {
         self.0.iter().rev()
+    }
+}
+
+impl<T> Default for Stack<T> {
+    fn default() -> Self {
+        Stack(Vec::new())
     }
 }
 

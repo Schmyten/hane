@@ -1,7 +1,7 @@
-use std::fs::{read_dir, read_to_string};
-use std::path::Path;
 use hane_kernel::global::Global;
 use hane_syntax::parser::parse;
+use std::fs::{read_dir, read_to_string};
+use std::path::Path;
 
 fn main() {
     let mut tests = 0;
@@ -9,11 +9,15 @@ fn main() {
 
     for test in read_dir("tests").unwrap() {
         let test = test.unwrap();
-        if !test.file_type().unwrap().is_file() { continue; }
+        if !test.file_type().unwrap().is_file() {
+            continue;
+        }
         let fullname = test.file_name();
         let fullname = fullname.to_str().unwrap();
-        if !fullname.ends_with(".v") { continue; }
-        let name = &fullname[..fullname.len()-2];
+        if !fullname.ends_with(".v") {
+            continue;
+        }
+        let name = &fullname[..fullname.len() - 2];
         let path = test.path();
         let path = path.to_str().unwrap();
 
@@ -26,11 +30,11 @@ fn main() {
         if Path::new(&parse_err).exists() {
             let parse_err = read_to_string(parse_err).unwrap();
             match parse_result {
-                Ok(commands) => {
+                Ok(_commands) => {
                     eprintln!("{name}: Expected a parsing error, but expresion passed succesfully");
                     failed += 1;
                     continue;
-                },
+                }
                 Err(err) => {
                     let err = err.print(path, &content);
                     if err != parse_err {
@@ -42,7 +46,7 @@ fn main() {
                         failed += 1;
                         continue;
                     }
-                },
+                }
             }
 
             continue;
@@ -56,11 +60,13 @@ fn main() {
                 eprintln!("```\n{err}\n```");
                 failed += 1;
                 continue;
-            },
+            }
         };
 
         let mut global = Global::new();
-        let result = commands.into_iter().try_for_each(|command|command.lower(&mut global));
+        let result = commands
+            .into_iter()
+            .try_for_each(|command| command.lower(&mut global));
 
         let result_err = &format!("tests/{name}.err");
         if Path::new(&result_err).exists() {
@@ -71,7 +77,7 @@ fn main() {
                     eprintln!("```\n{global}\n```");
                     failed += 1;
                     continue;
-                },
+                }
                 Err(err) => {
                     let err = err.print(path, &content);
                     if err != result_err {
@@ -83,14 +89,16 @@ fn main() {
                         failed += 1;
                         continue;
                     }
-                },
+                }
             }
 
             continue;
         }
 
         let result_out = format!("tests/{name}.out");
-        if !Path::new(&result_out).exists() { continue; }
+        if !Path::new(&result_out).exists() {
+            continue;
+        }
 
         if let Err(err) = result {
             let err = err.print(path, &content);
