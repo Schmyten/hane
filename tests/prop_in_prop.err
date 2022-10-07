@@ -1,0 +1,8 @@
+ --> tests/prop_in_prop.v:1:27
+  |
+1 | Definition prop : Prop := Prop.
+  |                           ^^^^
+  |
+  = Incompatible Types
+Expected: Prop
+Actual: Type{0}

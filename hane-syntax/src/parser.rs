@@ -1,6 +1,6 @@
 use pest::Parser;
 use pest_derive::Parser;
-use crate::{Expr, ExprVariant, Span, SpanError, Command, CommandVariant};
+use crate::{Expr, ExprVariant, Span, SpanError, Command, CommandVariant, Sort};
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
@@ -74,7 +74,7 @@ fn parse_expr_inner(pair: Pair) -> (Span, Expr) {
     let mut pairs = pair.into_inner();
     let variant = match rule {
         Rule::expr_paren => return (span, parse_expr(pairs.next().unwrap())),
-        Rule::expr_prop => ExprVariant::Prop,
+        Rule::sort => ExprVariant::Sort(parse_sort(pairs.next().unwrap())),
         Rule::expr_var => ExprVariant::Var(pairs.next().unwrap().as_str().to_owned()),
         Rule::expr_product => {
             pairs.next();
@@ -102,4 +102,19 @@ fn parse_expr_inner(pair: Pair) -> (Span, Expr) {
         r => unreachable!("{:?}", r),
     };
     (span.clone(), Expr { span, variant: Box::new(variant) })
+}
+
+fn parse_sort(pair: Pair) -> Sort {
+    let rule = pair.as_rule();
+    let mut pairs = pair.into_inner();
+    match rule {
+        Rule::sort_prop => Sort::Prop,
+        Rule::sort_set => Sort::Set,
+        Rule::sort_type => {
+            pairs.next();
+            let universe = pairs.next().unwrap().as_str().parse().unwrap();
+            Sort::Type(universe)
+        },
+        r => unreachable!("{:?}", r),
+    }
 }

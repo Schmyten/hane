@@ -1,6 +1,6 @@
 use std::fmt::{self, Display, Formatter};
 
-use crate::{term::{Term, TypeError}, stack::Stack};
+use crate::{CommandError, Stack, Term};
 
 #[derive(Default)]
 pub struct Global<M, B> {
@@ -10,11 +10,6 @@ pub struct Global<M, B> {
 enum GEntry<M, B> {
     Definition(String, Term<M, B>, Term<M, B>),
     Axiom(String, Term<M, B>),
-}
-
-pub enum CommandError<M, B> {
-    NameAlreadyExists(String),
-    TypeError(TypeError<M, B>),
 }
 
 impl<M, B> Display for Global<M, B> {
@@ -66,7 +61,7 @@ impl<M: Clone, B: Clone> Global<M, B> {
         sort.expect_sort(self, &mut lenv).map_err(|err|(ttype.meta.clone(), CommandError::TypeError(err)))?;
         let value_type = value.type_check(self, &mut lenv)
             .map_err(|(meta, err)|(meta, CommandError::TypeError(err)))?;
-        value_type.expect_convertable(&ttype, self, &mut lenv).map_err(|err|(value.meta.clone(), CommandError::TypeError(err)))?;
+        value_type.expect_subtype(&ttype, self, &mut lenv).map_err(|err|(value.meta.clone(), CommandError::TypeError(err)))?;
         self.env.push((meta, GEntry::Definition(name, ttype, value)));
         Ok(())
     }

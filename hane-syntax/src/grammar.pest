@@ -4,23 +4,30 @@ command_definition = { keyword_definition ~ ident ~ ":" ~ expr ~ ":=" ~ expr ~ "
 command_axiom = { keyword_axiom ~ ident ~ ":" ~ expr ~ "." }
 
 expr = { expr_inner+ }
-expr_inner = _{ expr_paren | expr_prop | expr_var | expr_product | expr_abstract | expr_bind }
+expr_inner = _{ expr_paren | sort | expr_var | expr_product | expr_abstract | expr_bind }
 expr_paren = { "(" ~ expr ~ ")" }
-expr_prop = { keyword_prop }
 expr_var = { ident }
 expr_product = { keyword_forall ~ ident ~ ":" ~ expr ~ "," ~ expr }
 expr_abstract = { keyword_fun ~ ident ~ ":" ~ expr ~ "=>" ~ expr }
 expr_bind = { keyword_let ~ ident ~ ":" ~ expr ~ ":=" ~ expr ~ keyword_in ~ expr }
 
-keyword = _{ keyword_definition | keyword_axiom | keyword_prop | keyword_forall | keyword_fun | keyword_let | keyword_in }
+sort = { sort_prop | sort_set | sort_type }
+sort_prop = { keyword_prop }
+sort_set = { keyword_set }
+sort_type = { keyword_type ~ "{" ~ number ~ "}" }
+
+keyword = _{ keyword_definition | keyword_axiom | keyword_prop | keyword_set | keyword_type | keyword_forall | keyword_fun | keyword_let | keyword_in }
 keyword_definition = @{ "Definition" ~ !(ASCII_ALPHANUMERIC | "_") }
 keyword_axiom = @{ "Axiom" ~ !(ASCII_ALPHANUMERIC | "_") }
 keyword_prop = @{ "Prop" ~ !(ASCII_ALPHANUMERIC | "_") }
+keyword_set = @{ "Set" ~ !(ASCII_ALPHANUMERIC | "_") }
+keyword_type = @{ "Type" ~ !(ASCII_ALPHANUMERIC | "_") }
 keyword_forall = @{ "forall" ~ !(ASCII_ALPHANUMERIC | "_") }
 keyword_fun = @{ "fun" ~ !(ASCII_ALPHANUMERIC | "_") }
 keyword_let = @{ "let" ~ !(ASCII_ALPHANUMERIC | "_") }
 keyword_in = @{ "in" ~ !(ASCII_ALPHANUMERIC | "_") }
 
+number = @{ ASCII_DIGIT+ }
 ident = @{ !keyword ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 
 WHITESPACE = _{ " " | "\n" | "\r" }

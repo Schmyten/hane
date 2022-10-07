@@ -1,5 +1,5 @@
-Definition unop : Prop := forall[Prop] (Prop).
-Definition binop : Prop := forall[Prop] (forall[Prop] (Prop)).
+Definition unop : Type{0} := forall[Prop] (Prop).
+Definition binop : Type{0} := forall[Prop] (forall[Prop] (Prop)).
 Definition impl : binop := fun[Prop] (fun[Prop] (forall['1] ('1))).
 Definition and : binop := fun[Prop] (fun[Prop] (forall[Prop] (((impl) (((impl) ('2)) (((impl) ('1)) ('0)))) ('0)))).
 Definition or : binop := fun[Prop] (fun[Prop] (forall[Prop] (((impl) (((impl) (((impl) ('2)) ('0))) (((impl) (((impl) ('1)) ('0))) ('0)))) ('0)))).

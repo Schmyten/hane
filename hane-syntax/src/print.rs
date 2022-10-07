@@ -21,7 +21,7 @@ fn fresh(x: &String, names: &Stack<String>) -> String {
 
 pub fn write_term<M>(buf: &mut impl Write, term: &Term<M>, names: &mut Stack<String>, level: usize) -> fmt::Result {
     match &*term.variant {
-        TermVariant::Prop => write!(buf, "Prop"),
+        TermVariant::Sort(sort) => write!(buf, "{sort}"),
         TermVariant::Var(n) =>
             if let Some(x) = names.get(*n) { write!(buf, "{}", x) }
             else { write!(buf, "?:{}", n - names.len()) },

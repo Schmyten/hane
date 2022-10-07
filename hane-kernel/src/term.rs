@@ -1,8 +1,7 @@
 use std::cmp::Ordering;
 use std::fmt::{self, Display, Formatter};
 
-use crate::global::Global;
-use crate::stack::Stack;
+use crate::{Global, Stack, Sort, TypeError, TypeErrorVariant};
 
 #[derive(Clone)]
 pub struct Term<M, B> {
@@ -12,7 +11,7 @@ pub struct Term<M, B> {
 
 #[derive(Clone)]
 pub enum TermVariant<M, B> {
-    Prop,
+    Sort(Sort),
     Var(usize),
     Const(String),
     App(Term<M, B>, Term<M, B>),
@@ -26,34 +25,6 @@ pub struct LEntry<M, B> {
     ttype: Term<M, B>,
 }
 
-pub struct TypeError<M, B> {
-    bindings: Vec<B>,
-    pub variant: TypeErrorVariant<M, B>,
-}
-
-pub enum TypeErrorVariant<M, B> {
-    IncompatibleTypes(Term<M, B>, Term<M, B>),
-    NotAProduct(Term<M, B>),
-    NotASort(Term<M, B>),
-    DebruijnOutOfScope(usize),
-    UndefinedConst(String),
-}
-
-impl<M, B> TypeError<M, B> {
-    pub fn new(variant: TypeErrorVariant<M, B>) -> Self {
-        TypeError { bindings: Vec::new(), variant }
-    }
-
-    pub fn bind(mut self, bind: B) -> Self {
-        self.bindings.push(bind);
-        self
-    }
-
-    pub fn bindings(&self) -> Stack<B> where B: Clone {
-        self.bindings.iter().rev().cloned().collect()
-    }
-}
-
 impl<M, B> PartialEq for Term<M, B> {
     fn eq(&self, other: &Self) -> bool {
         self.variant == other.variant
@@ -63,13 +34,14 @@ impl<M, B> PartialEq for Term<M, B> {
 impl<M, B> PartialEq for TermVariant<M, B> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
+            (Self::Sort(l0), Self::Sort(r0)) => l0 == r0,
             (Self::Var(l0), Self::Var(r0)) => l0 == r0,
             (Self::Const(l0), Self::Const(r0)) => l0 == r0,
             (Self::App(l0, l1), Self::App(r0, r1)) => l0 == r0 && l1 == r1,
             (Self::Product(_, l0, l1), Self::Product(_, r0, r1)) => l0 == r0 && l1 == r1,
             (Self::Abstract(_, l0, l1), Self::Abstract(_, r0, r1)) => l0 == r0 && l1 == r1,
             (Self::Bind(_, l0, l1, l2), Self::Bind(_, r0, r1, r2)) => l0 == r0 && l1 == r1 && l2 == r2,
-            _ => core::mem::discriminant(self) == core::mem::discriminant(other),
+            _ => false
         }
     }
 }
@@ -80,7 +52,7 @@ impl<M, B> Eq for TermVariant<M, B> {}
 impl<M, B> Display for TermVariant<M, B> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            TermVariant::Prop => write!(f, "Prop"),
+            TermVariant::Sort(sort) => write!(f, "{sort}"),
             TermVariant::Var(n) => write!(f, "'{}", n),
             TermVariant::Const(name) => write!(f, "{}", name),
             TermVariant::App(t1, t2) => write!(f, "({}) ({})", t1, t2),
@@ -100,7 +72,7 @@ impl<M, B> Display for Term<M, B> {
 impl<M: Clone, B: Clone> TermVariant<M, B> {
     fn push_inner(&self, cut: usize, amount: usize) -> Self {
         match self {
-            TermVariant::Prop => TermVariant::Prop,
+            TermVariant::Sort(sort) => TermVariant::Sort(sort.clone()),
             TermVariant::Var(n) => TermVariant::Var(if cut <= *n { *n + amount } else { *n }),
             TermVariant::Const(name) => TermVariant::Const(name.to_owned()),
             TermVariant::App(f, v) => TermVariant::App(f.push_inner(cut, amount), v.push_inner(cut, amount)),
@@ -130,7 +102,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
     
     fn subst_inner(&self, push: usize, f: &mut impl FnMut(&M, usize, usize) -> Self) -> Self {
         let variant = match &*self.variant {
-            TermVariant::Prop => TermVariant::Prop,
+            TermVariant::Sort(sort) => TermVariant::Sort(sort.clone()),
             TermVariant::Var(n) => return f(&self.meta, *n, push),
             TermVariant::Const(name) => TermVariant::Const(name.to_owned()),
             TermVariant::App(t, v) => TermVariant::App(t.subst_inner(push, f), v.subst_inner(push, f)),
@@ -147,7 +119,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
     
     fn try_subst_inner<E>(&self, push: usize, f: &mut impl FnMut(&M, usize, usize) -> Result<Self, E>) -> Result<Self, E> {
         let variant = match &*self.variant {
-            TermVariant::Prop => TermVariant::Prop,
+            TermVariant::Sort(sort) => TermVariant::Sort(sort.clone()),
             TermVariant::Var(n) => return f(&self.meta, *n, push),
             TermVariant::Const(name) => TermVariant::Const(name.to_owned()),
             TermVariant::App(t, v) => TermVariant::App(t.try_subst_inner(push, f)?, v.try_subst_inner(push, f)?),
@@ -181,7 +153,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
     pub fn normalize(&mut self, global: &Global<M, B>, lenv: &mut Stack<LEntry<M, B>>) {
         loop {
             match &mut *self.variant {
-                TermVariant::Prop => break,
+                TermVariant::Sort(_) => break,
                 TermVariant::Var(n) => {
                     // δ reduction
                     if let Some(value) = &lenv.get(*n).unwrap().value {
@@ -231,7 +203,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
 
     fn eta(&mut self) {
         match &mut *self.variant {
-            TermVariant::Prop => {},
+            TermVariant::Sort(_) => {},
             TermVariant::Var(_) => {},
             TermVariant::Const(_) => {},
             TermVariant::App(f, v) => {
@@ -260,30 +232,46 @@ impl<M: Clone, B: Clone> Term<M, B> {
         }
     }
 
-    pub fn convertable(&self, other: &Self, global: &Global<M, B>, lenv: &mut Stack<LEntry<M, B>>) -> bool {
+    pub fn expect_convertable(&self, other: &Self, global: &Global<M, B>, lenv: &mut Stack<LEntry<M, B>>) -> Result<(), TypeError<M, B>> {
         let mut this = self.clone();
         let mut other = other.clone();
         this.normalize(global, lenv);
         this.eta();
         other.normalize(global, lenv);
         other.eta();
-        this == other
+        if this == other {
+            Ok(())
+        } else {
+            Err(TypeError::new(TypeErrorVariant::IncompatibleTypes(other.clone(), self.clone())))
+        }
     }
 
-    pub fn expect_convertable(&self, other: &Self, global: &Global<M, B>, lenv: &mut Stack<LEntry<M, B>>) -> Result<(), TypeError<M, B>> {
-        self.convertable(other, global, lenv).then(||()).ok_or_else(||TypeError::new(TypeErrorVariant::IncompatibleTypes(other.clone(), self.clone())))
+    fn subtype_inner(&self, other: &Self, global: &Global<M, B>) -> bool {
+        match (&*self.variant, &*other.variant) {
+            (TermVariant::Sort(l), TermVariant::Sort(r)) => l <= r,
+            (TermVariant::Product(_, l0, l1), TermVariant::Product(_, r0, r1)) => l0 == r0 && l1.subtype_inner(r1, global),
+            (l, r) => l == r
+        }
     }
 
-    pub fn is_sort(&self, global: &Global<M, B>, lenv: &mut Stack<LEntry<M, B>>) -> bool {
+    pub fn expect_subtype(&self, other: &Self, global: &Global<M, B>, lenv: &mut Stack<LEntry<M, B>>) -> Result<(), TypeError<M, B>> {
+        let mut this = self.clone();
+        let mut other = other.clone();
+        this.normalize(global, lenv);
+        this.eta();
+        other.normalize(global, lenv);
+        other.eta();
+        if this.subtype_inner(&other, global) {
+            Ok(())
+        } else {
+            Err(TypeError::new(TypeErrorVariant::IncompatibleTypes(other.clone(), self.clone())))
+        }
+    }
+
+    pub fn expect_sort(&self, global: &Global<M, B>, lenv: &mut Stack<LEntry<M, B>>) -> Result<Sort, TypeError<M, B>> {
         let mut t = self.clone();
         t.normalize(global, lenv);
-        if let TermVariant::Prop = *t.variant { true } else { false }
-    }
-
-    pub fn expect_sort(&self, global: &Global<M, B>, lenv: &mut Stack<LEntry<M, B>>) -> Result<(), TypeError<M, B>> {
-        let mut t = self.clone();
-        t.normalize(global, lenv);
-        if let TermVariant::Prop = *t.variant { Ok(()) } else { Err(TypeError::new(TypeErrorVariant::NotASort(self.clone()))) }
+        if let TermVariant::Sort(sort) = *t.variant { Ok(sort) } else { Err(TypeError::new(TypeErrorVariant::NotASort(self.clone()))) }
     }
 
     pub fn expect_product(mut self, global: &Global<M, B>, lenv: &mut Stack<LEntry<M, B>>) -> Result<(Self, Self), TypeError<M, B>> {
@@ -297,25 +285,25 @@ impl<M: Clone, B: Clone> Term<M, B> {
 
     pub fn type_check(&self, global: &Global<M, B>, lenv: &mut Stack<LEntry<M, B>>) -> Result<Self, (M, TypeError<M, B>)> {
         Ok(match &*self.variant {
-            TermVariant::Prop => Term { meta: self.meta.clone(), variant: Box::new(TermVariant::Prop) },
+            TermVariant::Sort(sort) => Term { meta: self.meta.clone(), variant: Box::new(TermVariant::Sort(sort.ttype())) },
             TermVariant::Var(n) => return lenv.get(*n).map(|e|e.ttype.push(*n)).ok_or_else(||(self.meta.clone(), TypeError::new(TypeErrorVariant::DebruijnOutOfScope(*n)))),
             TermVariant::Const(name) => return global.get(name).map(|(_, ttype)|ttype.push(lenv.len())).ok_or_else(||(self.meta.clone(), TypeError::new(TypeErrorVariant::UndefinedConst(name.clone())))),
             TermVariant::App(f, v) => {
                 let f_tp = f.type_check(global, lenv)?;
                 let (input_type, output_type) = f_tp.expect_product(global, lenv).map_err(|err|(f.meta.clone(), err))?;
                 let v_tp = v.type_check(global, lenv)?;
-                v_tp.expect_convertable(&input_type, global, lenv).map_err(|err|(self.meta.clone(), err))?;
+                v_tp.expect_subtype(&input_type, global, lenv).map_err(|err|(self.meta.clone(), err))?;
                 output_type.subst_single(0, v)
             },
             TermVariant::Product(x, x_tp, t) => {
                 let x_sort = x_tp.type_check(global, lenv)?;
-                x_sort.expect_sort(global, lenv).map_err(|err|(x_tp.meta.clone(), err))?;
+                let x_sort = x_sort.expect_sort(global, lenv).map_err(|err|(x_tp.meta.clone(), err))?;
                 lenv.push(LEntry { value: None, ttype: x_tp.clone() });
                 let t_tp = t.type_check(global, lenv);
                 lenv.pop();
                 let t_tp = t_tp.map_err(|(meta, err)|(meta, err.bind(x.clone())))?;
-                t_tp.expect_sort(global, lenv).map_err(|err|(t.meta.clone(), err))?;
-                Term { meta: self.meta.clone(), variant: Box::new(TermVariant::Prop) }
+                let t_sort = t_tp.expect_sort(global, lenv).map_err(|err|(t.meta.clone(), err))?;
+                Term { meta: self.meta.clone(), variant: Box::new(TermVariant::Sort(x_sort.product(t_sort))) }
             },
             TermVariant::Abstract(x, x_tp, t) => {
                 let x_sort = x_tp.type_check(global, lenv)?;
@@ -330,7 +318,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 let x_sort = x_tp.type_check(global, lenv)?;
                 x_sort.expect_sort(global, lenv).map_err(|err|(x_tp.meta.clone(), err))?;
                 let x_val_tp = x_val.type_check(global, lenv)?;
-                x_val_tp.expect_convertable(x_tp, global, lenv).map_err(|err|(x_val.meta.clone(), err))?;
+                x_val_tp.expect_subtype(x_tp, global, lenv).map_err(|err|(x_val.meta.clone(), err))?;
                 let t_subst = t.subst_single(0, x_val);
                 lenv.push(LEntry { value: None, ttype: x_tp.clone() });
                 let t_tp = t_subst.type_check(global, lenv);

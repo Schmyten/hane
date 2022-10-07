@@ -1,6 +1,6 @@
 use std::fmt::{self, Display, Formatter};
 
-use hane_kernel::{term::{Term, TermVariant, TypeErrorVariant}, stack::Stack, global::{Global, CommandError}};
+use hane_kernel::{Stack, Global, Term, TermVariant, CommandError, TypeErrorVariant, Sort};
 use crate::{Expr, ExprVariant, SpanError, Command, CommandVariant, print::write_term, Span};
 
 pub enum LoweringError {
@@ -16,6 +16,14 @@ impl Display for LoweringError {
             LoweringError::CommandError(CommandError::TypeError(err)) => {
                 let mut names = err.bindings();
                 match &err.variant {
+                    TypeErrorVariant::NotSubtypeType(expected, actual) => {
+                        writeln!(f, "Invalid Subtype")?;
+                        write!(f, "Expected: ")?;
+                        write_term(f, expected, &mut names, 200)?;
+                        writeln!(f)?;
+                        write!(f, "Actual: ")?;
+                        write_term(f, actual, &mut names, 200)
+                    },
                     TypeErrorVariant::IncompatibleTypes(expected, actual) => {
                         writeln!(f, "Incompatible Types")?;
                         write!(f, "Expected: ")?;
@@ -66,7 +74,7 @@ impl Command {
 impl Expr {
     pub fn lower(self, global: &Global<Span, String>, names: &mut Stack<String>) -> Result<Term<Span, String>, SpanError<LoweringError>> {
         let variant = match *self.variant {
-            ExprVariant::Prop => TermVariant::Prop,
+            ExprVariant::Sort(sort) => TermVariant::Sort(sort.lower()),
             ExprVariant::Var(x) => {
                 if let Some((i, _)) = names.iter().enumerate().find(|(_, y)| x==**y) {
                     TermVariant::Var(i)
@@ -104,5 +112,15 @@ impl Expr {
             },
         };
         Ok(Term { meta: self.span, variant: Box::new(variant) })
+    }
+}
+
+impl crate::Sort {
+    pub fn lower(self) -> Sort {
+        match self {
+            crate::Sort::Prop => Sort::Prop,
+            crate::Sort::Set => Sort::Set,
+            crate::Sort::Type(n) => Sort::Type(n),
+        }
     }
 }

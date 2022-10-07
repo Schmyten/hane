@@ -1,5 +1,5 @@
-Definition unop : Prop := forall P : Prop, Prop.
-Definition binop : Prop := forall P : Prop, forall Q : Prop, Prop.
+Definition unop : Type{0} := forall P : Prop, Prop.
+Definition binop : Type{0} := forall P : Prop, forall Q : Prop, Prop.
 
 Definition impl : binop :=
     fun P : Prop => fun Q : Prop => forall p : P, Q.

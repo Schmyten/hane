@@ -43,13 +43,19 @@ pub enum CommandVariant {
     Axiom(String, Expr),
 }
 
+pub enum Sort {
+    Prop,
+    Set,
+    Type(usize),
+}
+
 pub struct Expr {
     pub span: Span,
     pub variant: Box<ExprVariant>,
 }
 
 pub enum ExprVariant {
-    Prop,
+    Sort(Sort),
     Var(String),
     App(Expr, Expr),
     Product(String, Expr, Expr),
