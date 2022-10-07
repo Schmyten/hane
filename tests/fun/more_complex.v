@@ -1,0 +1,1 @@
+Definition Foo : forall x : Prop, (forall y : Type{0}, Prop) := fun x : Prop => (fun y : Type{0} => x).

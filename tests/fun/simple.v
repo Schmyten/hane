@@ -1,0 +1,1 @@
+Definition foo : forall _ : Prop, Prop := fun v : Prop => v.
