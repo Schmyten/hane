@@ -4,8 +4,8 @@ use std::{
 };
 
 use crate::{
-    Command, CommandVariant, Expr, ExprVariant, LoweredCommand, LoweredCommandVariant, Span,
-    SpanError,
+    Binder, Command, CommandVariant, Expr, ExprVariant, LoweredCommand, LoweredCommandVariant,
+    Span, SpanError,
 };
 use hane_kernel::{Sort, Stack, Term, TermVariant};
 
@@ -95,7 +95,11 @@ impl Expr {
             ExprVariant::App(f, v) => {
                 TermVariant::App(f.lower(global, names)?, v.lower(global, names)?)
             }
-            ExprVariant::Product(x, x_tp, t) => {
+            ExprVariant::Product(binders, t) => {
+                let Binder {
+                    name: x,
+                    ttype: x_tp,
+                } = binders.into_iter().next().unwrap();
                 let x_tp = x_tp.lower(global, names)?;
                 names.push(x);
                 let t = t.lower(global, names);
@@ -103,7 +107,11 @@ impl Expr {
                 let t = t?;
                 TermVariant::Product(x, x_tp, t)
             }
-            ExprVariant::Abstract(x, x_tp, t) => {
+            ExprVariant::Abstract(binders, t) => {
+                let Binder {
+                    name: x,
+                    ttype: x_tp,
+                } = binders.into_iter().next().unwrap();
                 let x_tp = x_tp.lower(global, names)?;
                 names.push(x);
                 let t = t.lower(global, names);

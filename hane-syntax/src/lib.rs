@@ -71,12 +71,17 @@ pub struct Expr {
     pub variant: Box<ExprVariant>,
 }
 
+pub struct Binder {
+    pub name: String,
+    pub ttype: Expr,
+}
+
 pub enum ExprVariant {
     Sort(Sort),
     Var(String),
     App(Expr, Expr),
-    Product(String, Expr, Expr),
-    Abstract(String, Expr, Expr),
+    Product(Vec<Binder>, Expr),
+    Abstract(Vec<Binder>, Expr),
     Bind(String, Expr, Expr, Expr),
 }
 

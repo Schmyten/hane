@@ -1,4 +1,4 @@
-use crate::{Command, CommandVariant, Expr, ExprVariant, Sort, Span, SpanError};
+use crate::{Binder, Command, CommandVariant, Expr, ExprVariant, Sort, Span, SpanError};
 use pest::Parser;
 use pest_derive::Parser;
 
@@ -94,6 +94,29 @@ fn parse_expr(pair: Pair) -> Expr {
     })
 }
 
+fn parse_expr_bind(pair: Pair) -> Vec<Binder> {
+    let rule = pair.as_rule();
+    let mut pairs = pair.into_inner();
+    match rule {
+        Rule::paren_bind => pairs
+            .map(|p| {
+                let mut pairs = p.into_inner();
+                Binder {
+                    name: pairs.next().unwrap().as_str().to_owned(),
+                    ttype: parse_expr(pairs.next().unwrap()),
+                }
+            })
+            .collect(),
+        Rule::base_bind => {
+            vec![Binder {
+                name: pairs.next().unwrap().as_str().to_owned(),
+                ttype: parse_expr(pairs.next().unwrap()),
+            }]
+        }
+        other => unreachable!("{other:?}"),
+    }
+}
+
 fn parse_expr_inner(pair: Pair) -> (Span, Expr) {
     let span = Span::from_pest(pair.as_span());
     let rule = pair.as_rule();
@@ -103,18 +126,16 @@ fn parse_expr_inner(pair: Pair) -> (Span, Expr) {
         Rule::sort => ExprVariant::Sort(parse_sort(pairs.next().unwrap())),
         Rule::expr_var => ExprVariant::Var(pairs.next().unwrap().as_str().to_owned()),
         Rule::expr_product => {
-            pairs.next();
-            let x = pairs.next().unwrap().as_str().to_owned();
-            let x_tp = parse_expr(pairs.next().unwrap());
-            let t = parse_expr(pairs.next().unwrap());
-            ExprVariant::Product(x, x_tp, t)
+            pairs.next(); // Skip forall keyword
+            let binders = parse_expr_bind(pairs.next().unwrap()); // parse binders
+            let t = parse_expr(pairs.next().unwrap()); // barse body
+            ExprVariant::Product(binders, t)
         }
         Rule::expr_abstract => {
-            pairs.next();
-            let x = pairs.next().unwrap().as_str().to_owned();
-            let x_tp = parse_expr(pairs.next().unwrap());
+            pairs.next(); // Skip fun keyword
+            let binders = parse_expr_bind(pairs.next().unwrap());
             let t = parse_expr(pairs.next().unwrap());
-            ExprVariant::Abstract(x, x_tp, t)
+            ExprVariant::Abstract(binders, t)
         }
         Rule::expr_bind => {
             pairs.next();
