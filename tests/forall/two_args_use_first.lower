@@ -1,0 +1,1 @@
+Definition foo : forall[Type{99}] (forall[Type{69}] (Type{99})) := fun[Type{99}] (fun[Type{69}] ('1)).

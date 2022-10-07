@@ -96,28 +96,74 @@ impl Expr {
                 TermVariant::App(f.lower(global, names)?, v.lower(global, names)?)
             }
             ExprVariant::Product(binders, t) => {
-                let Binder {
-                    name: x,
-                    ttype: x_tp,
-                } = binders.into_iter().next().unwrap();
-                let x_tp = x_tp.lower(global, names)?;
-                names.push(x);
-                let t = t.lower(global, names);
-                let x = names.pop().unwrap();
-                let t = t?;
-                TermVariant::Product(x, x_tp, t)
+                let mut type_stack = Vec::new();
+                for Binder { name, ttype } in binders {
+                    let lowered_type = ttype.lower(global, names)?;
+                    type_stack.push(lowered_type);
+                    names.push(name);
+                }
+                match t.lower(global, names) {
+                    Err(e) => {
+                        // Lowering failed, but we still have to clean up the names stack
+                        names.pop_n(type_stack.len());
+                        return Err(e);
+                    }
+                    Ok(t) => {
+                        let mut type_stack = type_stack.into_iter().rev();
+                        let mut ret = TermVariant::Product(
+                            names.pop().unwrap(),
+                            type_stack.next().unwrap(),
+                            t,
+                        );
+                        for ttype in type_stack {
+                            let name = names.pop().unwrap();
+                            ret = TermVariant::Product(
+                                name,
+                                ttype,
+                                Term {
+                                    meta: self.span.clone(),
+                                    variant: Box::new(ret),
+                                },
+                            )
+                        }
+                        ret
+                    }
+                }
             }
             ExprVariant::Abstract(binders, t) => {
-                let Binder {
-                    name: x,
-                    ttype: x_tp,
-                } = binders.into_iter().next().unwrap();
-                let x_tp = x_tp.lower(global, names)?;
-                names.push(x);
-                let t = t.lower(global, names);
-                let x = names.pop().unwrap();
-                let t = t?;
-                TermVariant::Abstract(x, x_tp, t)
+                let mut type_stack = Vec::new();
+                for Binder { name, ttype } in binders {
+                    let lowered_type = ttype.lower(global, names)?;
+                    type_stack.push(lowered_type);
+                    names.push(name);
+                }
+                match t.lower(global, names) {
+                    Err(e) => {
+                        // Lowering failed, but we still have to clean up the names stack
+                        names.pop_n(type_stack.len());
+                        return Err(e);
+                    }
+                    Ok(t) => {
+                        let mut type_stack = type_stack.into_iter().rev();
+                        let mut ret = TermVariant::Abstract(
+                            names.pop().unwrap(),
+                            type_stack.next().unwrap(),
+                            t,
+                        );
+                        for ttype in type_stack {
+                            let name = names.pop().unwrap();
+                            ret = TermVariant::Abstract(
+                                name,
+                                ttype,
+                                Term {
+                                    meta: self.span.clone(),
+                                    variant: Box::new(ret),
+                                },
+                            )
+                        }
+                        ret
+                    }
+                }
             }
             ExprVariant::Bind(x, x_tp, x_val, t) => {
                 let x_tp = x_tp.lower(global, names)?;

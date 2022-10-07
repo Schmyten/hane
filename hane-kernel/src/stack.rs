@@ -23,6 +23,11 @@ impl<T> Stack<T> {
         self.0.pop()
     }
 
+    pub fn pop_n(&mut self, n: usize) {
+        debug_assert!(n <= self.len());
+        self.0.truncate(self.len() - n)
+    }
+
     pub fn get(&self, index: usize) -> Option<&T> {
         if index < self.0.len() {
             // Safety: `index` is checked to be within bounds

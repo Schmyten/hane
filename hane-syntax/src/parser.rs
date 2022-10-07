@@ -78,9 +78,6 @@ pub fn parse_command(pair: Pair) -> Command {
 }
 
 fn parse_expr(pair: Pair) -> Expr {
-    if pair.as_rule() != Rule::expr {
-        dbg!(&pair);
-    }
     debug_assert!(
         pair.as_rule() == Rule::expr,
         "Unexpected rule: {:?}",
@@ -100,7 +97,7 @@ fn parse_expr(pair: Pair) -> Expr {
 fn parse_expr_bind(pair: Pair) -> Vec<Binder> {
     let rule = pair.as_rule();
     assert!(rule == Rule::expr_bind);
-    dbg!(pair.into_inner())
+    pair.into_inner()
         .map(|p| {
             let mut pairs = p.into_inner();
             Binder {
