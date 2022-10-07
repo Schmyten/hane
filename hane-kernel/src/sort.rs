@@ -45,7 +45,7 @@ impl Sort {
         match self {
             Sort::Prop => Sort::Type(0),
             Sort::Set => Sort::Type(0),
-            Sort::Type(n) => Sort::Type(n+1),
+            Sort::Type(n) => Sort::Type(n + 1),
         }
     }
 
@@ -57,4 +57,3 @@ impl Sort {
         }
     }
 }
-

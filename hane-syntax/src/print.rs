@@ -19,24 +19,39 @@ fn fresh(x: &String, names: &Stack<String>) -> String {
     unreachable!()
 }
 
-pub fn write_term<M>(buf: &mut impl Write, term: &Term<M>, names: &mut Stack<String>, level: usize) -> fmt::Result {
+pub fn write_term<M>(
+    buf: &mut impl Write,
+    term: &Term<M>,
+    names: &mut Stack<String>,
+    level: usize,
+) -> fmt::Result {
     match &*term.variant {
         TermVariant::Sort(sort) => write!(buf, "{sort}"),
-        TermVariant::Var(n) =>
-            if let Some(x) = names.get(*n) { write!(buf, "{}", x) }
-            else { write!(buf, "?:{}", n - names.len()) },
+        TermVariant::Var(n) => {
+            if let Some(x) = names.get(*n) {
+                write!(buf, "{}", x)
+            } else {
+                write!(buf, "?:{}", n - names.len())
+            }
+        }
         TermVariant::Const(name) => write!(buf, "{name}"),
         TermVariant::App(f, v) => {
-            if level < 10 { write!(buf, "(")?; }
+            if level < 10 {
+                write!(buf, "(")?;
+            }
             write_term(buf, f, names, 10)?;
             write!(buf, " ")?;
             write_term(buf, v, names, 9)?;
-            if level < 10 { write!(buf, ")")?; }
+            if level < 10 {
+                write!(buf, ")")?;
+            }
             Ok(())
-        },
+        }
         TermVariant::Product(x, x_tp, t) => {
             let x = fresh(x, names);
-            if level < 200 { write!(buf, "(")?; }
+            if level < 200 {
+                write!(buf, "(")?;
+            }
             write!(buf, "forall {x} : ")?;
             write_term(buf, x_tp, names, 200)?;
             write!(buf, ", ")?;
@@ -44,12 +59,16 @@ pub fn write_term<M>(buf: &mut impl Write, term: &Term<M>, names: &mut Stack<Str
             let r = write_term(buf, t, names, 200);
             names.pop();
             r?;
-            if level < 200 { write!(buf, ")")?; }
+            if level < 200 {
+                write!(buf, ")")?;
+            }
             Ok(())
-        },
+        }
         TermVariant::Abstract(x, x_tp, t) => {
             let x = fresh(x, names);
-            if level < 200 { write!(buf, "(")?; }
+            if level < 200 {
+                write!(buf, "(")?;
+            }
             write!(buf, "fun {x} : ")?;
             write_term(buf, x_tp, names, 200)?;
             write!(buf, " => ")?;
@@ -57,12 +76,16 @@ pub fn write_term<M>(buf: &mut impl Write, term: &Term<M>, names: &mut Stack<Str
             let r = write_term(buf, t, names, 200);
             names.pop();
             r?;
-            if level < 200 { write!(buf, ")")?; }
+            if level < 200 {
+                write!(buf, ")")?;
+            }
             Ok(())
-        },
+        }
         TermVariant::Bind(x, x_tp, x_val, t) => {
             let x = fresh(x, names);
-            if level < 200 { write!(buf, "(")?; }
+            if level < 200 {
+                write!(buf, "(")?;
+            }
             write!(buf, "let {x} : ")?;
             write_term(buf, x_tp, names, 200)?;
             write!(buf, " := ")?;
@@ -72,9 +95,11 @@ pub fn write_term<M>(buf: &mut impl Write, term: &Term<M>, names: &mut Stack<Str
             let r = write_term(buf, t, names, 200);
             names.pop();
             r?;
-            if level < 200 { write!(buf, ")")?; }
+            if level < 200 {
+                write!(buf, ")")?;
+            }
             Ok(())
-        },
+        }
     }
 }
 

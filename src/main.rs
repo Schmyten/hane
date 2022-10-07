@@ -89,7 +89,7 @@ fn main() {
                 Ok(commands) => {
                     eprintln!("{name}: Expected a lowering error, but test ran successfully");
                     eprintln!("```");
-                    commands.iter().for_each(|command|eprintln!("{command}"));
+                    commands.iter().for_each(|command| eprintln!("{command}"));
                     eprintln!("```");
                     failed += 1;
                     continue;
@@ -129,14 +129,16 @@ fn main() {
                 eprintln!("```\n{err}\n```");
                 failed += 1;
                 continue;
-            },
+            }
         };
 
         let lower_out = read_to_string(&lower_out).unwrap();
         let lower_print = {
             use std::fmt::Write;
             let mut print = String::new();
-            commands.iter().for_each(|command|writeln!(print, "{command}").unwrap());
+            commands
+                .iter()
+                .for_each(|command| writeln!(print, "{command}").unwrap());
             print
         };
 

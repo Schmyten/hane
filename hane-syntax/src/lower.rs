@@ -1,7 +1,13 @@
-use std::{fmt::{self, Display, Formatter}, collections::HashSet};
+use std::{
+    collections::HashSet,
+    fmt::{self, Display, Formatter},
+};
 
-use hane_kernel::{Stack, Term, TermVariant, Sort};
-use crate::{Expr, ExprVariant, SpanError, Command, CommandVariant, LoweredCommand, LoweredCommandVariant, Span};
+use crate::{
+    Command, CommandVariant, Expr, ExprVariant, LoweredCommand, LoweredCommandVariant, Span,
+    SpanError,
+};
+use hane_kernel::{Sort, Stack, Term, TermVariant};
 
 pub enum LoweringError {
     NameNotFree(String),
@@ -20,52 +26,75 @@ impl Display for LoweringError {
 impl Display for LoweredCommand {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self.variant {
-            LoweredCommandVariant::Definition(name, ttype, value) => write!(f, "Definition {name} : {ttype} := {value}."),
+            LoweredCommandVariant::Definition(name, ttype, value) => {
+                write!(f, "Definition {name} : {ttype} := {value}.")
+            }
             LoweredCommandVariant::Axiom(name, ttype) => write!(f, "Axiom {name} : {ttype}."),
         }
     }
 }
 
 impl Command {
-    pub fn lower(self, global: &mut HashSet<String>) -> Result<LoweredCommand, SpanError<LoweringError>> {
+    pub fn lower(
+        self,
+        global: &mut HashSet<String>,
+    ) -> Result<LoweredCommand, SpanError<LoweringError>> {
         let mut names = Stack::new();
         let variant = match self.variant {
             CommandVariant::Definition(name, ttype, value) => {
                 if global.contains(&name) {
-                    return Err(SpanError { span: self.span, err: LoweringError::NameNotFree(name) })
+                    return Err(SpanError {
+                        span: self.span,
+                        err: LoweringError::NameNotFree(name),
+                    });
                 }
                 let ttype = ttype.lower(global, &mut names)?;
                 let value = value.lower(global, &mut names)?;
                 global.insert(name.clone());
                 LoweredCommandVariant::Definition(name, ttype, value)
-            },
+            }
             CommandVariant::Axiom(name, ttype) => {
                 if global.contains(&name) {
-                    return Err(SpanError { span: self.span, err: LoweringError::NameNotFree(name) })
+                    return Err(SpanError {
+                        span: self.span,
+                        err: LoweringError::NameNotFree(name),
+                    });
                 }
                 let ttype = ttype.lower(global, &mut names)?;
                 global.insert(name.clone());
                 LoweredCommandVariant::Axiom(name, ttype)
-            },
+            }
         };
-        Ok(LoweredCommand { span: self.span, variant })
+        Ok(LoweredCommand {
+            span: self.span,
+            variant,
+        })
     }
 }
 
 impl Expr {
-    pub fn lower(self, global: &HashSet<String>, names: &mut Stack<String>) -> Result<Term<Span, String>, SpanError<LoweringError>> {
+    pub fn lower(
+        self,
+        global: &HashSet<String>,
+        names: &mut Stack<String>,
+    ) -> Result<Term<Span, String>, SpanError<LoweringError>> {
         let variant = match *self.variant {
             ExprVariant::Sort(sort) => TermVariant::Sort(sort.lower()),
             ExprVariant::Var(x) => {
-                if let Some((i, _)) = names.iter().enumerate().find(|(_, y)| x==**y) {
+                if let Some((i, _)) = names.iter().enumerate().find(|(_, y)| x == **y) {
                     TermVariant::Var(i)
                 } else if global.contains(&x) {
                     TermVariant::Const(x)
                 } else {
-                    return Err(SpanError { span: self.span.clone(), err: LoweringError::UnknownVariable(x.to_owned()) })
+                    return Err(SpanError {
+                        span: self.span.clone(),
+                        err: LoweringError::UnknownVariable(x.to_owned()),
+                    });
                 }
-            },
-            ExprVariant::App(f, v) => TermVariant::App(f.lower(global, names)?, v.lower(global, names)?),
+            }
+            ExprVariant::App(f, v) => {
+                TermVariant::App(f.lower(global, names)?, v.lower(global, names)?)
+            }
             ExprVariant::Product(x, x_tp, t) => {
                 let x_tp = x_tp.lower(global, names)?;
                 names.push(x);
@@ -73,7 +102,7 @@ impl Expr {
                 let x = names.pop().unwrap();
                 let t = t?;
                 TermVariant::Product(x, x_tp, t)
-            },
+            }
             ExprVariant::Abstract(x, x_tp, t) => {
                 let x_tp = x_tp.lower(global, names)?;
                 names.push(x);
@@ -81,7 +110,7 @@ impl Expr {
                 let x = names.pop().unwrap();
                 let t = t?;
                 TermVariant::Abstract(x, x_tp, t)
-            },
+            }
             ExprVariant::Bind(x, x_tp, x_val, t) => {
                 let x_tp = x_tp.lower(global, names)?;
                 let x_val = x_val.lower(global, names)?;
@@ -90,9 +119,12 @@ impl Expr {
                 let x = names.pop().unwrap();
                 let t = t?;
                 TermVariant::Bind(x, x_tp, x_val, t)
-            },
+            }
         };
-        Ok(Term { meta: self.span, variant: Box::new(variant) })
+        Ok(Term {
+            meta: self.span,
+            variant: Box::new(variant),
+        })
     }
 }
 

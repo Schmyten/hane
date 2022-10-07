@@ -21,7 +21,10 @@ pub enum TypeErrorVariant<M, B> {
 
 impl<M, B> TypeError<M, B> {
     pub fn new(variant: TypeErrorVariant<M, B>) -> Self {
-        TypeError { bindings: Vec::new(), variant }
+        TypeError {
+            bindings: Vec::new(),
+            variant,
+        }
     }
 
     pub fn bind(mut self, bind: B) -> Self {
@@ -29,7 +32,10 @@ impl<M, B> TypeError<M, B> {
         self
     }
 
-    pub fn bindings(&self) -> Stack<B> where B: Clone {
+    pub fn bindings(&self) -> Stack<B>
+    where
+        B: Clone,
+    {
         self.bindings.iter().rev().cloned().collect()
     }
 }

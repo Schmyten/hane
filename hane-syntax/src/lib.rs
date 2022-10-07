@@ -1,9 +1,9 @@
-pub mod print;
-pub mod parser;
-pub mod lower;
 pub mod eval;
+pub mod lower;
+pub mod parser;
+pub mod print;
 
-use std::fmt::{self, Write, Display};
+use std::fmt::{self, Display, Write};
 
 use hane_kernel::Term;
 
@@ -17,7 +17,11 @@ pub struct Location {
 impl Location {
     fn from_pest(pos: pest::Position) -> Self {
         let (line, col) = pos.line_col();
-        Location { pos: pos.pos(), line, col }
+        Location {
+            pos: pos.pos(),
+            line,
+            col,
+        }
     }
 }
 
@@ -53,7 +57,7 @@ pub struct LoweredCommand {
 
 pub enum LoweredCommandVariant {
     Definition(String, Term<Span, String>, Term<Span, String>),
-    Axiom(String, Term<Span, String>)
+    Axiom(String, Term<Span, String>),
 }
 
 pub enum Sort {
@@ -85,15 +89,24 @@ impl Span {
     pub fn write(&self, path: &str, input: &str, f: &mut impl Write) -> fmt::Result {
         if self.start.line == self.end.line {
             let len = format!("{}", self.start.line).len();
-            let line = input.lines().nth(self.start.line-1).unwrap();
-            writeln!(f, "{0: >len$}--> {1}:{2}:{3}", "", path, self.start.line, self.start.col)?;
+            let line = input.lines().nth(self.start.line - 1).unwrap();
+            writeln!(
+                f,
+                "{0: >len$}--> {1}:{2}:{3}",
+                "", path, self.start.line, self.start.col
+            )?;
             writeln!(f, "{0: >len$} |", "")?;
             writeln!(f, "{0} | {1}", self.start.line, line)?;
-            writeln!(f, "{0: >len$} | {0: >col$}{0:^>span$}", "", col=self.start.col-1, span=1.max(self.end.col-self.start.col))?;
+            writeln!(
+                f,
+                "{0: >len$} | {0: >col$}{0:^>span$}",
+                "",
+                col = self.start.col - 1,
+                span = 1.max(self.end.col - self.start.col)
+            )?;
             writeln!(f, "{0: >len$} |", "")?;
             write!(f, "{0: >len$} = ", "")?;
         } else {
-            
         }
         Ok(())
     }
