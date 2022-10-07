@@ -16,10 +16,10 @@ expr_abstract = { keyword_fun ~ expr_bind ~ "=>" ~ expr }
 expr_let_bind = {
     keyword_let ~ ident ~ ":" ~ expr ~ ":=" ~ expr ~ keyword_in ~ expr
 }
-expr_bind = _{
+expr_bind = {
     paren_bind+ | base_bind
 }
-paren_bind = { "(" ~ base_bind ~ ")" }
+paren_bind = _{ "(" ~ base_bind ~ ")" }
 base_bind = { ident ~ ":" ~ expr}
 
 

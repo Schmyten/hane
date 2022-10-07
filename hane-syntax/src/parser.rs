@@ -78,6 +78,9 @@ pub fn parse_command(pair: Pair) -> Command {
 }
 
 fn parse_expr(pair: Pair) -> Expr {
+    if pair.as_rule() != Rule::expr {
+        dbg!(&pair);
+    }
     debug_assert!(
         pair.as_rule() == Rule::expr,
         "Unexpected rule: {:?}",
@@ -96,25 +99,16 @@ fn parse_expr(pair: Pair) -> Expr {
 
 fn parse_expr_bind(pair: Pair) -> Vec<Binder> {
     let rule = pair.as_rule();
-    let mut pairs = pair.into_inner();
-    match rule {
-        Rule::paren_bind => pairs
-            .map(|p| {
-                let mut pairs = p.into_inner();
-                Binder {
-                    name: pairs.next().unwrap().as_str().to_owned(),
-                    ttype: parse_expr(pairs.next().unwrap()),
-                }
-            })
-            .collect(),
-        Rule::base_bind => {
-            vec![Binder {
+    assert!(rule == Rule::expr_bind);
+    dbg!(pair.into_inner())
+        .map(|p| {
+            let mut pairs = p.into_inner();
+            Binder {
                 name: pairs.next().unwrap().as_str().to_owned(),
                 ttype: parse_expr(pairs.next().unwrap()),
-            }]
-        }
-        other => unreachable!("{other:?}"),
-    }
+            }
+        })
+        .collect()
 }
 
 fn parse_expr_inner(pair: Pair) -> (Span, Expr) {
@@ -137,7 +131,7 @@ fn parse_expr_inner(pair: Pair) -> (Span, Expr) {
             let t = parse_expr(pairs.next().unwrap());
             ExprVariant::Abstract(binders, t)
         }
-        Rule::expr_bind => {
+        Rule::expr_let_bind => {
             pairs.next();
             let x = pairs.next().unwrap().as_str().to_owned();
             let x_tp = parse_expr(pairs.next().unwrap());
