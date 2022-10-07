@@ -1,8 +1,11 @@
 pub mod print;
 pub mod parser;
 pub mod lower;
+pub mod eval;
 
 use std::fmt::{self, Write, Display};
+
+use hane_kernel::Term;
 
 #[derive(Clone, Copy)]
 pub struct Location {
@@ -41,6 +44,16 @@ pub struct Command {
 pub enum CommandVariant {
     Definition(String, Expr, Expr),
     Axiom(String, Expr),
+}
+
+pub struct LoweredCommand {
+    pub span: Span,
+    pub variant: LoweredCommandVariant,
+}
+
+pub enum LoweredCommandVariant {
+    Definition(String, Term<Span, String>, Term<Span, String>),
+    Axiom(String, Term<Span, String>)
 }
 
 pub enum Sort {

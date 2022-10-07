@@ -1,84 +1,65 @@
-use std::fmt::{self, Display, Formatter};
+use std::{fmt::{self, Display, Formatter}, collections::HashSet};
 
-use hane_kernel::{Stack, Global, Term, TermVariant, CommandError, TypeErrorVariant, Sort};
-use crate::{Expr, ExprVariant, SpanError, Command, CommandVariant, print::write_term, Span};
+use hane_kernel::{Stack, Term, TermVariant, Sort};
+use crate::{Expr, ExprVariant, SpanError, Command, CommandVariant, LoweredCommand, LoweredCommandVariant, Span};
 
 pub enum LoweringError {
+    NameNotFree(String),
     UnknownVariable(String),
-    CommandError(CommandError<Span, String>)
 }
 
 impl Display for LoweringError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
+            LoweringError::NameNotFree(x) => write!(f, "A constant named `{x}` already exists"),
             LoweringError::UnknownVariable(x) => write!(f, "Unknown variable `{x}`"),
-            LoweringError::CommandError(CommandError::NameAlreadyExists(name)) => write!(f, "The name `{name}` has already been defined"),
-            LoweringError::CommandError(CommandError::TypeError(err)) => {
-                let mut names = err.bindings();
-                match &err.variant {
-                    TypeErrorVariant::NotSubtypeType(expected, actual) => {
-                        writeln!(f, "Invalid Subtype")?;
-                        write!(f, "Expected: ")?;
-                        write_term(f, expected, &mut names, 200)?;
-                        writeln!(f)?;
-                        write!(f, "Actual: ")?;
-                        write_term(f, actual, &mut names, 200)
-                    },
-                    TypeErrorVariant::IncompatibleTypes(expected, actual) => {
-                        writeln!(f, "Incompatible Types")?;
-                        write!(f, "Expected: ")?;
-                        write_term(f, expected, &mut names, 200)?;
-                        writeln!(f)?;
-                        write!(f, "Actual: ")?;
-                        write_term(f, actual, &mut names, 200)
-                    },
-                    TypeErrorVariant::NotAProduct(ttype) => {
-                        writeln!(f, "Expected a product")?;
-                        write!(f, "Found: ")?;
-                        write_term(f, ttype, &mut names, 200)
-                    },
-                    TypeErrorVariant::NotASort(ttype) => {
-                        writeln!(f, "Expected a sort")?;
-                        write!(f, "Found: ")?;
-                        write_term(f, ttype, &mut names, 200)
-                    },
-                    TypeErrorVariant::DebruijnOutOfScope(n) => write!(f, "Found debruijn index {n}, but there are only {} names in scope", names.len()),
-                    TypeErrorVariant::UndefinedConst(name) => write!(f, "Unknown constant {name}"),
-                }
-            },
+        }
+    }
+}
+
+impl Display for LoweredCommand {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match &self.variant {
+            LoweredCommandVariant::Definition(name, ttype, value) => write!(f, "Definition {name} : {ttype} := {value}."),
+            LoweredCommandVariant::Axiom(name, ttype) => write!(f, "Axiom {name} : {ttype}."),
         }
     }
 }
 
 impl Command {
-    pub fn lower(self, global: &mut Global<Span, String>) -> Result<(), SpanError<LoweringError>> {
+    pub fn lower(self, global: &mut HashSet<String>) -> Result<LoweredCommand, SpanError<LoweringError>> {
         let mut names = Stack::new();
-        match self.variant {
+        let variant = match self.variant {
             CommandVariant::Definition(name, ttype, value) => {
+                if global.contains(&name) {
+                    return Err(SpanError { span: self.span, err: LoweringError::NameNotFree(name) })
+                }
                 let ttype = ttype.lower(global, &mut names)?;
                 let value = value.lower(global, &mut names)?;
-                global.definition(self.span, name, ttype, value).map_err(|(span, err)|
-                    SpanError { span, err: LoweringError::CommandError(err) }
-                )
+                global.insert(name.clone());
+                LoweredCommandVariant::Definition(name, ttype, value)
             },
             CommandVariant::Axiom(name, ttype) => {
+                if global.contains(&name) {
+                    return Err(SpanError { span: self.span, err: LoweringError::NameNotFree(name) })
+                }
                 let ttype = ttype.lower(global, &mut names)?;
-                global.axiom(self.span, name, ttype).map_err(|(span, err)|
-                    SpanError { span, err: LoweringError::CommandError(err) }
-                )
+                global.insert(name.clone());
+                LoweredCommandVariant::Axiom(name, ttype)
             },
-        }
+        };
+        Ok(LoweredCommand { span: self.span, variant })
     }
 }
 
 impl Expr {
-    pub fn lower(self, global: &Global<Span, String>, names: &mut Stack<String>) -> Result<Term<Span, String>, SpanError<LoweringError>> {
+    pub fn lower(self, global: &HashSet<String>, names: &mut Stack<String>) -> Result<Term<Span, String>, SpanError<LoweringError>> {
         let variant = match *self.variant {
             ExprVariant::Sort(sort) => TermVariant::Sort(sort.lower()),
             ExprVariant::Var(x) => {
                 if let Some((i, _)) = names.iter().enumerate().find(|(_, y)| x==**y) {
                     TermVariant::Var(i)
-                } else if global.free(&x).is_err() {
+                } else if global.contains(&x) {
                     TermVariant::Const(x)
                 } else {
                     return Err(SpanError { span: self.span.clone(), err: LoweringError::UnknownVariable(x.to_owned()) })

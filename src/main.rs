@@ -1,7 +1,7 @@
 use hane_kernel::global::Global;
 use hane_syntax::parser::parse;
+use std::collections::HashSet;
 use std::fs::read_to_string;
-use std::path::Path;
 
 fn main() {
     let mut tests = 0;
@@ -71,10 +71,89 @@ fn main() {
             }
         };
 
+        let mut global = HashSet::new();
+        let lower = commands
+            .into_iter()
+            .map(|command| command.lower(&mut global))
+            .collect::<Result<Vec<_>, _>>();
+
+        let lower_err_path = {
+            let mut path = path.to_path_buf();
+            assert!(path.pop());
+            path.push(format!("{name}.lower.err"));
+            path
+        };
+        if lower_err_path.exists() {
+            let lower_err = read_to_string(&lower_err_path).unwrap();
+            match lower {
+                Ok(commands) => {
+                    eprintln!("{name}: Expected an error, but test ran successfully");
+                    eprintln!("```");
+                    commands.iter().for_each(|command|eprintln!("{command}"));
+                    eprintln!("```");
+                    failed += 1;
+                    continue;
+                }
+                Err(err) => {
+                    let err = err.print(path.to_string_lossy().as_ref(), &content);
+                    if err != lower_err {
+                        eprintln!("{name}: Error does not match expected error");
+                        eprintln!("expected:");
+                        eprintln!("```\n{lower_err}\n```");
+                        eprintln!("actual:");
+                        eprintln!("```\n{err}\n```");
+                        failed += 1;
+                        continue;
+                    }
+                }
+            }
+
+            continue;
+        }
+
+        let lower_out = {
+            let mut path = path.to_path_buf();
+            assert!(path.pop());
+            path.push(format!("{name}.lower"));
+            path
+        };
+        if !lower_out.exists() {
+            continue;
+        }
+
+        let commands = match lower {
+            Ok(commands) => commands,
+            Err(err) => {
+                let err = err.print(path.to_string_lossy().as_ref(), &content);
+                eprintln!("{name}: Lowering failed with error:");
+                eprintln!("```\n{err}\n```");
+                failed += 1;
+                continue;
+            },
+        };
+
+        let lower_out = read_to_string(&lower_out).unwrap();
+        let lower_print = {
+            use std::fmt::Write;
+            let mut print = String::new();
+            commands.iter().for_each(|command|writeln!(print, "{command}").unwrap());
+            print
+        };
+
+        if lower_print != lower_out {
+            eprintln!("{name}: Lowering result does not match expected output");
+            eprintln!("expected:");
+            eprintln!("```\n{lower_out}\n```");
+            eprintln!("actual:");
+            eprintln!("```\n{lower_print}\n```");
+            failed += 1;
+            continue;
+        }
+
         let mut global = Global::new();
         let result = commands
             .into_iter()
-            .try_for_each(|command| command.lower(&mut global));
+            .try_for_each(|command| command.eval(&mut global));
 
         let result_err_path = {
             let mut path = path.to_path_buf();

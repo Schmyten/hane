@@ -1,0 +1,1 @@
+Definition prop : Prop := Prop.
