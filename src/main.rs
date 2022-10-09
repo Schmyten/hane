@@ -27,16 +27,14 @@ fn main() {
             path
         };
 
-        let content =
-            read_to_string(path).expect(&format!("valid utf-8 in {}", path.to_string_lossy()));
+        let content = read_to_string(path)
+            .unwrap_or_else(|_| panic!("valid utf-8 in {}", path.to_string_lossy()));
 
         let parse_result = parse(&content);
 
         if parse_err_path.exists() {
-            let parse_err = read_to_string(&parse_err_path).expect(&format!(
-                "valid utf-8 in {}",
-                parse_err_path.to_string_lossy()
-            ));
+            let parse_err = read_to_string(&parse_err_path)
+                .unwrap_or_else(|_| panic!("valid utf-8 in {}", parse_err_path.to_string_lossy()));
             match parse_result {
                 Ok(_commands) => {
                     eprintln!("{name}: Expected a parsing error, but expresion passed succesfully");

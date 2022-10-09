@@ -23,7 +23,7 @@ impl<T> Stack<T> {
         self.0.pop()
     }
 
-    pub fn pop_n<'a>(&'a mut self, n: usize) -> impl Iterator<Item = T> + 'a {
+    pub fn pop_n(&mut self, n: usize) -> impl Iterator<Item = T> + '_ {
         debug_assert!(n <= self.len());
         self.0.drain((self.len() - n)..)
     }
