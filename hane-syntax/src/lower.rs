@@ -95,73 +95,71 @@ impl Expr {
             ExprVariant::App(f, v) => {
                 TermVariant::App(f.lower(global, names)?, v.lower(global, names)?)
             }
+            // TODO: Possibly implement something more RAII like for cleanup of names
             ExprVariant::Product(binders, t) => {
                 let mut type_stack = Vec::new();
                 for Binder { name, ttype } in binders {
-                    let lowered_type = ttype.lower(global, names)?;
+                    let lowered_type = match ttype.lower(global, names) {
+                        Ok(lt) => lt,
+                        Err(e) => {
+                            drop(names.pop_n(type_stack.len()));
+                            return Err(e);
+                        }
+                    };
                     type_stack.push(lowered_type);
                     names.push(name);
                 }
                 match t.lower(global, names) {
                     Err(e) => {
                         // Lowering failed, but we still have to clean up the names stack
-                        names.pop_n(type_stack.len());
+                        drop(names.pop_n(type_stack.len()));
                         return Err(e);
                     }
                     Ok(t) => {
-                        let mut type_stack = type_stack.into_iter().rev();
-                        let mut ret = TermVariant::Product(
-                            names.pop().unwrap(),
-                            type_stack.next().unwrap(),
-                            t,
-                        );
-                        for ttype in type_stack {
-                            let name = names.pop().unwrap();
-                            ret = TermVariant::Product(
-                                name,
-                                ttype,
-                                Term {
-                                    meta: self.span.clone(),
-                                    variant: Box::new(ret),
-                                },
-                            )
-                        }
-                        ret
+                        let mut iter = names
+                            .pop_n(type_stack.len())
+                            .zip(type_stack.into_iter().rev());
+
+                        let make_term = |inner, (name, ttype)| Term {
+                            meta: self.span.clone(),
+                            variant: Box::new(TermVariant::Product(name, ttype, inner)),
+                        };
+                        let inner = iter.next().unwrap();
+                        return Ok(iter.fold(make_term(t, inner), make_term));
                     }
                 }
             }
+            // TODO: Possibly implement something more RAII like for cleanup of names
             ExprVariant::Abstract(binders, t) => {
                 let mut type_stack = Vec::new();
                 for Binder { name, ttype } in binders {
-                    let lowered_type = ttype.lower(global, names)?;
+                    let lowered_type = match ttype.lower(global, names) {
+                        Ok(lt) => lt,
+                        Err(e) => {
+                            drop(names.pop_n(type_stack.len()));
+                            return Err(e);
+                        }
+                    };
                     type_stack.push(lowered_type);
                     names.push(name);
                 }
                 match t.lower(global, names) {
                     Err(e) => {
                         // Lowering failed, but we still have to clean up the names stack
-                        names.pop_n(type_stack.len());
+                        drop(names.pop_n(type_stack.len()));
                         return Err(e);
                     }
                     Ok(t) => {
-                        let mut type_stack = type_stack.into_iter().rev();
-                        let mut ret = TermVariant::Abstract(
-                            names.pop().unwrap(),
-                            type_stack.next().unwrap(),
-                            t,
-                        );
-                        for ttype in type_stack {
-                            let name = names.pop().unwrap();
-                            ret = TermVariant::Abstract(
-                                name,
-                                ttype,
-                                Term {
-                                    meta: self.span.clone(),
-                                    variant: Box::new(ret),
-                                },
-                            )
-                        }
-                        ret
+                        let mut iter = names
+                            .pop_n(type_stack.len())
+                            .zip(type_stack.into_iter().rev());
+
+                        let make_term = |inner, (name, ttype)| Term {
+                            meta: self.span.clone(),
+                            variant: Box::new(TermVariant::Abstract(name, ttype, inner)),
+                        };
+                        let inner = iter.next().unwrap();
+                        return Ok(iter.fold(make_term(t, inner), make_term));
                     }
                 }
             }

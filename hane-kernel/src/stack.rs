@@ -23,9 +23,9 @@ impl<T> Stack<T> {
         self.0.pop()
     }
 
-    pub fn pop_n(&mut self, n: usize) {
+    pub fn pop_n<'a>(&'a mut self, n: usize) -> impl Iterator<Item = T> + 'a {
         debug_assert!(n <= self.len());
-        self.0.truncate(self.len() - n)
+        self.0.drain((self.len() - n)..)
     }
 
     pub fn get(&self, index: usize) -> Option<&T> {
