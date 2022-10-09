@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::fmt::{self, Display, Formatter};
 
-use crate::entry::{Entry as LEntry, EntryRef};
+use crate::entry::{Entry, EntryRef};
 use crate::{Global, Sort, Stack, TypeError, TypeErrorVariant};
 
 #[derive(Clone)]
@@ -215,7 +215,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
         .ok()
     }
 
-    pub fn normalize(&mut self, global: &Global<M, B>, lenv: &mut Stack<LEntry<M, B>>) {
+    pub fn normalize(&mut self, global: &Global<M, B>, lenv: &mut Stack<Entry<M, B>>) {
         loop {
             match &mut *self.variant {
                 TermVariant::Sort(_) => break,
@@ -245,19 +245,13 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 }
                 TermVariant::Product(_name, input_type, output_type) => {
                     input_type.normalize(global, lenv);
-                    lenv.push(LEntry {
-                        value: None,
-                        ttype: input_type.clone(),
-                    });
+                    lenv.push(Entry::new(input_type.clone()));
                     output_type.normalize(global, lenv);
                     lenv.pop();
                 }
                 TermVariant::Abstract(_name, input_type, body) => {
                     input_type.normalize(global, lenv);
-                    lenv.push(LEntry {
-                        value: None,
-                        ttype: input_type.clone(),
-                    });
+                    lenv.push(Entry::new(input_type.clone()));
                     body.normalize(global, lenv);
                     lenv.pop();
                 }
@@ -307,7 +301,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
         &self,
         other: &Self,
         global: &Global<M, B>,
-        lenv: &mut Stack<LEntry<M, B>>,
+        lenv: &mut Stack<Entry<M, B>>,
     ) -> Result<(), TypeError<M, B>> {
         let mut this = self.clone();
         let mut other = other.clone();
@@ -339,7 +333,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
         &self,
         other: &Self,
         global: &Global<M, B>,
-        lenv: &mut Stack<LEntry<M, B>>,
+        lenv: &mut Stack<Entry<M, B>>,
     ) -> Result<(), TypeError<M, B>> {
         let mut this = self.clone();
         let mut other = other.clone();
@@ -360,7 +354,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
     pub fn expect_sort(
         &self,
         global: &Global<M, B>,
-        lenv: &mut Stack<LEntry<M, B>>,
+        lenv: &mut Stack<Entry<M, B>>,
     ) -> Result<Sort, TypeError<M, B>> {
         let mut t = self.clone();
         t.normalize(global, lenv);
@@ -374,7 +368,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
     pub fn expect_product(
         mut self,
         global: &Global<M, B>,
-        lenv: &mut Stack<LEntry<M, B>>,
+        lenv: &mut Stack<Entry<M, B>>,
     ) -> Result<(Self, Self), TypeError<M, B>> {
         self.normalize(global, lenv);
         if let TermVariant::Product(_, input_type, output_type) = *self.variant {
@@ -387,7 +381,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
     pub fn type_check(
         &self,
         global: &Global<M, B>,
-        lenv: &mut Stack<LEntry<M, B>>,
+        lenv: &mut Stack<Entry<M, B>>,
     ) -> Result<Self, (M, TypeError<M, B>)> {
         Ok(match &*self.variant {
             TermVariant::Sort(sort) => Term {
@@ -428,10 +422,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 let x_sort = x_sort
                     .expect_sort(global, lenv)
                     .map_err(|err| (x_tp.meta.clone(), err))?;
-                lenv.push(LEntry {
-                    value: None,
-                    ttype: x_tp.clone(),
-                });
+                lenv.push(Entry::new(x_tp.clone()));
                 let t_tp = t.type_check(global, lenv);
                 lenv.pop();
                 let t_tp = t_tp.map_err(|(meta, err)| (meta, err.bind(x.clone())))?;
@@ -448,10 +439,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 x_sort
                     .expect_sort(global, lenv)
                     .map_err(|err| (x_tp.meta.clone(), err))?;
-                lenv.push(LEntry {
-                    value: None,
-                    ttype: x_tp.clone(),
-                });
+                lenv.push(Entry::new(x_tp.clone()));
                 let t_tp = t.type_check(global, lenv);
                 lenv.pop();
                 let t_tp = t_tp.map_err(|(meta, err)| (meta, err.bind(x.clone())))?;
@@ -470,10 +458,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                     .expect_subtype(x_tp, global, lenv)
                     .map_err(|err| (x_val.meta.clone(), err))?;
                 let t_subst = t.subst_single(0, x_val);
-                lenv.push(LEntry {
-                    value: None,
-                    ttype: x_tp.clone(),
-                });
+                lenv.push(Entry::new(x_tp.clone()));
                 let t_tp = t_subst.type_check(global, lenv);
                 lenv.pop();
                 t_tp.map_err(|(meta, err)| (meta, err.bind(x.clone())))?
