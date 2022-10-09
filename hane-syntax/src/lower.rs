@@ -4,8 +4,8 @@ use std::{
 };
 
 use crate::{
-    Command, CommandVariant, Expr, ExprVariant, LoweredCommand, LoweredCommandVariant, Span,
-    SpanError,
+    Binder, Command, CommandVariant, Expr, ExprVariant, LoweredCommand, LoweredCommandVariant,
+    Span, SpanError,
 };
 use hane_kernel::{Sort, Stack, Term, TermVariant};
 
@@ -95,21 +95,73 @@ impl Expr {
             ExprVariant::App(f, v) => {
                 TermVariant::App(f.lower(global, names)?, v.lower(global, names)?)
             }
-            ExprVariant::Product(x, x_tp, t) => {
-                let x_tp = x_tp.lower(global, names)?;
-                names.push(x);
-                let t = t.lower(global, names);
-                let x = names.pop().unwrap();
-                let t = t?;
-                TermVariant::Product(x, x_tp, t)
+            // TODO: Possibly implement something more RAII like for cleanup of names
+            ExprVariant::Product(binders, t) => {
+                let mut type_stack = Vec::new();
+                for Binder { name, ttype } in binders {
+                    let lowered_type = match ttype.lower(global, names) {
+                        Ok(lt) => lt,
+                        Err(e) => {
+                            drop(names.pop_n(type_stack.len()));
+                            return Err(e);
+                        }
+                    };
+                    type_stack.push(lowered_type);
+                    names.push(name);
+                }
+                match t.lower(global, names) {
+                    Err(e) => {
+                        // Lowering failed, but we still have to clean up the names stack
+                        drop(names.pop_n(type_stack.len()));
+                        return Err(e);
+                    }
+                    Ok(t) => {
+                        let mut iter = names
+                            .pop_n(type_stack.len())
+                            .zip(type_stack.into_iter().rev());
+
+                        let make_term = |inner, (name, ttype)| Term {
+                            meta: self.span.clone(),
+                            variant: Box::new(TermVariant::Product(name, ttype, inner)),
+                        };
+                        let inner = iter.next().unwrap();
+                        return Ok(iter.fold(make_term(t, inner), make_term));
+                    }
+                }
             }
-            ExprVariant::Abstract(x, x_tp, t) => {
-                let x_tp = x_tp.lower(global, names)?;
-                names.push(x);
-                let t = t.lower(global, names);
-                let x = names.pop().unwrap();
-                let t = t?;
-                TermVariant::Abstract(x, x_tp, t)
+            // TODO: Possibly implement something more RAII like for cleanup of names
+            ExprVariant::Abstract(binders, t) => {
+                let mut type_stack = Vec::new();
+                for Binder { name, ttype } in binders {
+                    let lowered_type = match ttype.lower(global, names) {
+                        Ok(lt) => lt,
+                        Err(e) => {
+                            drop(names.pop_n(type_stack.len()));
+                            return Err(e);
+                        }
+                    };
+                    type_stack.push(lowered_type);
+                    names.push(name);
+                }
+                match t.lower(global, names) {
+                    Err(e) => {
+                        // Lowering failed, but we still have to clean up the names stack
+                        drop(names.pop_n(type_stack.len()));
+                        return Err(e);
+                    }
+                    Ok(t) => {
+                        let mut iter = names
+                            .pop_n(type_stack.len())
+                            .zip(type_stack.into_iter().rev());
+
+                        let make_term = |inner, (name, ttype)| Term {
+                            meta: self.span.clone(),
+                            variant: Box::new(TermVariant::Abstract(name, ttype, inner)),
+                        };
+                        let inner = iter.next().unwrap();
+                        return Ok(iter.fold(make_term(t, inner), make_term));
+                    }
+                }
             }
             ExprVariant::Bind(x, x_tp, x_val, t) => {
                 let x_tp = x_tp.lower(global, names)?;

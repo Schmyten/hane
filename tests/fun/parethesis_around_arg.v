@@ -1,0 +1,1 @@
+Definition bar : forall foo : Type{99}, Type{99} := fun (bar : Type{99}) => bar.

@@ -1,4 +1,4 @@
-use crate::{Command, CommandVariant, Expr, ExprVariant, Sort, Span, SpanError};
+use crate::{Binder, Command, CommandVariant, Expr, ExprVariant, Sort, Span, SpanError};
 use pest::Parser;
 use pest_derive::Parser;
 
@@ -60,14 +60,16 @@ pub fn parse_command(pair: Pair) -> Command {
     let mut pairs = pair.into_inner();
     let variant = match rule {
         Rule::command_definition => {
-            pairs.next();
+            let kw = pairs.next();
+            debug_assert_eq!(kw.map(|s| s.as_str()), Some("Definition"));
             let name = pairs.next().unwrap().as_str().to_owned();
             let ttype = parse_expr(pairs.next().unwrap());
             let value = parse_expr(pairs.next().unwrap());
             CommandVariant::Definition(name, ttype, value)
         }
         Rule::command_axiom => {
-            pairs.next();
+            let kw = pairs.next();
+            debug_assert_eq!(kw.map(|s| s.as_str()), Some("Axiom"));
             let name = pairs.next().unwrap().as_str().to_owned();
             let ttype = parse_expr(pairs.next().unwrap());
             CommandVariant::Axiom(name, ttype)
@@ -94,6 +96,21 @@ fn parse_expr(pair: Pair) -> Expr {
     })
 }
 
+fn parse_expr_bind(pair: Pair) -> Vec<Binder> {
+    let rule = pair.as_rule();
+    debug_assert_eq!(rule, Rule::expr_bind);
+    pair.into_inner()
+        .map(|p| {
+            debug_assert_eq!(p.as_rule(), Rule::base_bind);
+            let mut pairs = p.into_inner();
+            Binder {
+                name: pairs.next().unwrap().as_str().to_owned(),
+                ttype: parse_expr(pairs.next().unwrap()),
+            }
+        })
+        .collect()
+}
+
 fn parse_expr_inner(pair: Pair) -> (Span, Expr) {
     let span = Span::from_pest(pair.as_span());
     let rule = pair.as_rule();
@@ -103,26 +120,28 @@ fn parse_expr_inner(pair: Pair) -> (Span, Expr) {
         Rule::sort => ExprVariant::Sort(parse_sort(pairs.next().unwrap())),
         Rule::expr_var => ExprVariant::Var(pairs.next().unwrap().as_str().to_owned()),
         Rule::expr_product => {
-            pairs.next();
-            let x = pairs.next().unwrap().as_str().to_owned();
-            let x_tp = parse_expr(pairs.next().unwrap());
-            let t = parse_expr(pairs.next().unwrap());
-            ExprVariant::Product(x, x_tp, t)
+            let kw = pairs.next(); // Skip forall keyword
+            debug_assert_eq!(kw.map(|s| s.as_str()), Some("forall"));
+            let binders = parse_expr_bind(pairs.next().unwrap()); // parse binders
+            let t = parse_expr(pairs.next().unwrap()); // parse body
+            ExprVariant::Product(binders, t)
         }
         Rule::expr_abstract => {
-            pairs.next();
-            let x = pairs.next().unwrap().as_str().to_owned();
-            let x_tp = parse_expr(pairs.next().unwrap());
-            let t = parse_expr(pairs.next().unwrap());
-            ExprVariant::Abstract(x, x_tp, t)
+            let kw = pairs.next(); // Skip fun keyword
+            debug_assert_eq!(kw.map(|s| s.as_str()), Some("fun"));
+            let binders = parse_expr_bind(pairs.next().unwrap()); // parse arguments
+            let t = parse_expr(pairs.next().unwrap()); // parse body
+            ExprVariant::Abstract(binders, t)
         }
-        Rule::expr_bind => {
-            pairs.next();
-            let x = pairs.next().unwrap().as_str().to_owned();
-            let x_tp = parse_expr(pairs.next().unwrap());
-            let x_val = parse_expr(pairs.next().unwrap());
-            pairs.next();
-            let t = parse_expr(pairs.next().unwrap());
+        Rule::expr_let_bind => {
+            let kw = pairs.next(); // Skip let keyword
+            debug_assert_eq!(kw.map(|s| s.as_str()), Some("let"));
+            let x = pairs.next().unwrap().as_str().to_owned(); // parse var name
+            let x_tp = parse_expr(pairs.next().unwrap()); // parse type
+            let x_val = parse_expr(pairs.next().unwrap()); // parse value
+            let kw = pairs.next(); // Skip in keyword
+            debug_assert_eq!(kw.map(|s| s.as_str()), Some("let"));
+            let t = parse_expr(pairs.next().unwrap()); // parse rest of body
             ExprVariant::Bind(x, x_tp, x_val, t)
         }
         r => unreachable!("{:?}", r),
@@ -143,8 +162,9 @@ fn parse_sort(pair: Pair) -> Sort {
         Rule::sort_prop => Sort::Prop,
         Rule::sort_set => Sort::Set,
         Rule::sort_type => {
-            pairs.next();
-            let universe = pairs.next().unwrap().as_str().parse().unwrap();
+            let kw = pairs.next(); // skip Type keyword
+            debug_assert_eq!(kw.map(|s| s.as_str()), Some("Type"));
+            let universe = pairs.next().unwrap().as_str().parse().unwrap(); // parse universe
             Sort::Type(universe)
         }
         r => unreachable!("{:?}", r),

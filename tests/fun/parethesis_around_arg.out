@@ -1,0 +1,1 @@
+Definition bar : forall[Type{99}] (Type{99}) := fun[Type{99}] ('0).

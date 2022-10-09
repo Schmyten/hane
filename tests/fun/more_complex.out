@@ -1,0 +1,1 @@
+Definition Foo : forall[Prop] (forall[Type{0}] (Prop)) := fun[Prop] (fun[Type{0}] ('1)).
