@@ -351,6 +351,25 @@ impl<M: Clone, B: Clone> Term<M, B> {
         }
     }
 
+    pub fn strip_products(mut self) -> (Vec<(B, Self)>, Self) {
+        let mut arity = Vec::new();
+        while let TermVariant::Product(x, ttype, body) = *self.variant {
+            arity.push((x, ttype));
+            self = body
+        }
+        (arity, self)
+    }
+
+    pub fn strip_args(mut self) -> (Self, Vec<Self>) {
+        let mut args = Vec::new();
+        while let TermVariant::App(fun, arg) = *self.variant {
+            args.push(arg);
+            self = fun
+        }
+        args.reverse();
+        (self, args)
+    }
+
     pub fn expect_sort(
         &self,
         global: &Global<M, B>,

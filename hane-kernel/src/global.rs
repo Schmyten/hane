@@ -1,6 +1,8 @@
+use std::collections::HashSet;
 use std::fmt::{self, Display, Formatter};
 
-use crate::{entry::EntryRef, CommandError, Stack, Term};
+use crate::entry::{Entry, EntryRef};
+use crate::{CommandError, Sort, Stack, Term, TermVariant, TypeError, TypeErrorVariant};
 
 #[derive(Default)]
 pub struct Global<M, B> {
@@ -16,11 +18,11 @@ enum GEntry<M, B> {
 struct IndBody<M, B> {
     name: String,
     arity: Vec<(B, Term<M, B>)>,
-    sort: Term<M, B>,
+    sort: Sort,
     /// Shorthand for `∀ arity.., sort`
-    arity_ttype: Term<M, B>,
+    arity_type: Term<M, B>,
     /// Shorthand for `∀ param.. arity.., sort`
-    full_ttype: Term<M, B>,
+    full_type: Term<M, B>,
     constructors: Vec<IndConstructor<M, B>>,
 }
 
@@ -29,9 +31,9 @@ struct IndConstructor<M, B> {
     arity: Vec<(B, Term<M, B>)>,
     ttype: Term<M, B>,
     /// Shorthand for `∀ arity.., ttype`
-    arity_ttype: Term<M, B>,
+    arity_type: Term<M, B>,
     /// Shorthand for `∀ param.. arity.., ttype`
-    full_ttype: Term<M, B>,
+    full_type: Term<M, B>,
 }
 
 impl<M, B> Display for Global<M, B> {
@@ -57,9 +59,9 @@ impl<M, B> Display for GEntry<M, B> {
                     for (_, param) in params {
                         write!(f, " ({param})")?;
                     }
-                    write!(f, " : {} :=", body.arity_ttype)?;
+                    write!(f, " : {} :=", body.arity_type)?;
                     for constructor in &body.constructors {
-                        writeln!(f, "    | {} : {}", constructor.name, constructor.arity_ttype)?;
+                        writeln!(f, "    | {} : {}", constructor.name, constructor.arity_type)?;
                     }
                 }
                 write!(f, ".")
@@ -77,9 +79,9 @@ impl<M: Clone, B: Clone> Global<M, B> {
         let free = self.env.iter().all(|(_, entry)| match entry {
             GEntry::Definition(x, _, _) => x != name,
             GEntry::Axiom(x, _) => x != name,
-            GEntry::Inductive(_, bodies) => bodies.iter().all(|body|
-                body.name != name && body.constructors.iter().all(|c|c.name != name)
-            )
+            GEntry::Inductive(_, bodies) => bodies
+                .iter()
+                .all(|body| body.name != name && body.constructors.iter().all(|c| c.name != name)),
         });
         if free {
             Ok(())
@@ -94,15 +96,18 @@ impl<M: Clone, B: Clone> Global<M, B> {
                 (x == name).then_some(EntryRef::with_value(value, ttype))
             }
             GEntry::Axiom(x, ttype) => (x == name).then_some(EntryRef::new(ttype)),
-            GEntry::Inductive(_, bodies) => {
-                bodies.iter().find_map(|body| {
+            GEntry::Inductive(_, bodies) => bodies
+                .iter()
+                .find_map(|body| {
                     if body.name == name {
-                        Some(&body.full_ttype)
+                        Some(&body.full_type)
                     } else {
-                        body.constructors.iter().find_map(|constructor|(constructor.name == name).then_some(&constructor.full_ttype))
+                        body.constructors.iter().find_map(|constructor| {
+                            (constructor.name == name).then_some(&constructor.full_type)
+                        })
                     }
-                }).map(|ttype| EntryRef::new(ttype))
-            }
+                })
+                .map(|ttype| EntryRef::new(ttype)),
         })
     }
 
@@ -145,6 +150,137 @@ impl<M: Clone, B: Clone> Global<M, B> {
         sort.expect_sort(self, &mut lenv)
             .map_err(|err| (ttype.meta.clone(), CommandError::TypeError(err)))?;
         self.env.push((meta, GEntry::Axiom(name, ttype)));
+        Ok(())
+    }
+
+    pub fn inductive(
+        &mut self,
+        meta: M,
+        params: Vec<(B, Term<M, B>)>,
+        bodies: Vec<(String, Term<M, B>, Vec<(String, Term<M, B>)>)>,
+    ) -> Result<(), (M, CommandError<M, B>)> {
+        let mut names = HashSet::new();
+        for (name, _, constructors) in &bodies {
+            self.free(name).map_err(|err| (meta.clone(), err))?;
+            if !names.insert(&**name) {
+                return Err((meta.clone(), CommandError::NameAlreadyExists(name.clone())));
+            }
+
+            for (name, _) in constructors {
+                self.free(name).map_err(|err| (meta.clone(), err))?;
+                if !names.insert(&**name) {
+                    return Err((meta.clone(), CommandError::NameAlreadyExists(name.clone())));
+                }
+            }
+        }
+
+        let mut ind_bodies = Vec::with_capacity(bodies.len());
+        let mut constructors = Vec::with_capacity(bodies.len());
+        let mut lenv = Stack::new();
+
+        for (x, param) in &params {
+            let ttype = param
+                .type_check(self, &mut lenv)
+                .map_err(|(meta, err)| (meta, CommandError::TypeError(err)))?;
+            ttype
+                .expect_sort(self, &mut lenv)
+                .map_err(|err| (param.meta.clone(), CommandError::TypeError(err)))?;
+        }
+
+        lenv.extend(
+            params
+                .iter()
+                .map(|(x, param)| Entry::new(x.clone(), param.clone())),
+        );
+
+        for (name, arity_type, cs) in bodies {
+            constructors.push(cs);
+
+            arity_type
+                .type_check(self, &mut lenv)
+                .map_err(|(meta, err)| (meta, CommandError::TypeError(err)))?;
+
+            let mut norm = arity_type.clone();
+            norm.normalize(self, &mut lenv);
+            let (arity, norm) = norm.strip_products();
+
+            let sort = if let TermVariant::Sort(sort) = *norm.variant {
+                sort
+            } else {
+                return Err((
+                    arity_type.meta.clone(),
+                    CommandError::TypeError(TypeError::new(
+                        &mut lenv,
+                        TypeErrorVariant::NotASort(norm),
+                    )),
+                ));
+            };
+
+            let full_type =
+                params
+                    .iter()
+                    .cloned()
+                    .rev()
+                    .fold(arity_type.clone(), |body, (x, ttype)| Term {
+                        meta: body.meta.clone(),
+                        variant: Box::new(TermVariant::Product(x, ttype, body)),
+                    });
+
+            ind_bodies.push(IndBody {
+                name,
+                arity,
+                sort,
+                arity_type,
+                full_type,
+                constructors: Vec::new(),
+            })
+        }
+
+        self.env.extend(ind_bodies.iter().map(|body| {
+            (
+                meta.clone(),
+                GEntry::Axiom(body.name.clone(), body.full_type.clone()),
+            )
+        }));
+
+        for (body, constructors) in ind_bodies.iter_mut().zip(constructors) {
+            body.constructors = constructors
+                .into_iter()
+                .map(|(name, arity_type)| {
+                    let sort = arity_type
+                        .type_check(self, &mut lenv)
+                        .map_err(|(meta, err)| (meta, CommandError::TypeError(err)))?;
+                    let _ = sort
+                        .expect_sort(self, &mut lenv)
+                        .map_err(|err| (arity_type.meta.clone(), CommandError::TypeError(err)))?;
+
+                    let mut norm = arity_type.clone();
+                    norm.normalize(self, &mut lenv);
+                    let (arity, ttype) = norm.strip_products();
+                    let full_type = params.iter().cloned().rev().fold(
+                        arity_type.clone(),
+                        |body, (x, ttype)| Term {
+                            meta: body.meta.clone(),
+                            variant: Box::new(TermVariant::Product(x, ttype, body)),
+                        },
+                    );
+
+                    Ok(IndConstructor {
+                        name,
+                        arity,
+                        ttype,
+                        arity_type,
+                        full_type,
+                    })
+                })
+                .collect::<Result<_, (M, CommandError<M, B>)>>()?;
+        }
+
+        self.env.truncate(self.env.len() - ind_bodies.len());
+
+        //Todo: Positivity of constructors
+
+        self.env.push((meta, GEntry::Inductive(params, ind_bodies)));
         Ok(())
     }
 }
