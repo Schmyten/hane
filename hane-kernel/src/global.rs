@@ -184,14 +184,9 @@ impl<M: Clone, B: Clone> Global<M, B> {
                 .map_err(|(meta, err)| (meta, CommandError::TypeError(err)))?;
             ttype
                 .expect_sort(self, &mut lenv)
-                .map_err(|err| (param.meta.clone(), CommandError::TypeError(err)))?;
+                .map_err(|err|(param.meta.clone(), CommandError::TypeError(err)))?;
+            lenv.push(Entry::new(x.clone(), param.clone()));
         }
-
-        lenv.extend(
-            params
-                .iter()
-                .map(|(x, param)| Entry::new(x.clone(), param.clone())),
-        );
 
         for (name, arity_type, cs) in bodies {
             constructors.push(cs);
