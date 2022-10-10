@@ -48,6 +48,19 @@ pub struct Command {
 pub enum CommandVariant {
     Definition(String, Expr, Expr),
     Axiom(String, Expr),
+    Inductive(Vec<IndBody>),
+}
+
+pub struct IndBody {
+    pub name: String,
+    pub params: Vec<Binder>,
+    pub ttype: Expr,
+    pub constructors: Vec<IndConstructor>,
+}
+
+pub struct IndConstructor {
+    pub name: String,
+    pub ttype: Expr,
 }
 
 pub struct LoweredCommand {
@@ -58,8 +71,21 @@ pub struct LoweredCommand {
 pub enum LoweredCommandVariant {
     Definition(String, Term<Span, String>, Term<Span, String>),
     Axiom(String, Term<Span, String>),
+    Inductive(Vec<(String, Term<Span, String>)>, Vec<LoweredIndBody>),
 }
 
+pub struct LoweredIndBody {
+    pub name: String,
+    pub ttype: Term<Span, String>,
+    pub constructors: Vec<LoweredIndConstructor>,
+}
+
+pub struct LoweredIndConstructor {
+    pub name: String,
+    pub ttype: Term<Span, String>,
+}
+
+#[derive(PartialEq, Eq)]
 pub enum Sort {
     Prop,
     Set,
@@ -71,11 +97,20 @@ pub struct Expr {
     pub variant: Box<ExprVariant>,
 }
 
+impl Eq for Expr {}
+impl PartialEq for Expr {
+    fn eq(&self, other: &Self) -> bool {
+        self.variant == other.variant
+    }
+}
+
+#[derive(PartialEq, Eq)]
 pub struct Binder {
     pub name: String,
     pub ttype: Expr,
 }
 
+#[derive(PartialEq, Eq)]
 pub enum ExprVariant {
     Sort(Sort),
     Var(String),

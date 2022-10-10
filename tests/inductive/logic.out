@@ -1,0 +1,12 @@
+Inductive False : Prop :=.
+Inductive True : Prop :=
+    | I : True.
+Inductive and (Prop) (Prop) : Prop :=
+    | conj : forall['1] (forall['1] (((and) ('3)) ('2))).
+Inductive or (Prop) (Prop) : Prop :=
+    | or_introl : forall['1] (((or) ('2)) ('1))
+    | or_intror : forall['0] (((or) ('2)) ('1)).
+Inductive ex (Set) (forall['0] (Prop)) : Prop :=
+    | ex_intro : forall['1] (forall[('1) ('0)] (((ex) ('3)) ('2))).
+Inductive eq (Set) ('0) : forall['1] (Prop) :=
+    | eq_refl : (((eq) ('1)) ('0)) ('0).

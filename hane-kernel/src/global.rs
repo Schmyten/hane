@@ -55,13 +55,13 @@ impl<M, B> Display for GEntry<M, B> {
                 let mut pre = "Inductive";
                 for body in bodies {
                     write!(f, "{pre} {}", body.name)?;
-                    pre = "    with";
+                    pre = "\n    with";
                     for (_, param) in params {
                         write!(f, " ({param})")?;
                     }
                     write!(f, " : {} :=", body.arity_type)?;
                     for constructor in &body.constructors {
-                        writeln!(f, "    | {} : {}", constructor.name, constructor.arity_type)?;
+                        write!(f, "\n    | {} : {}", constructor.name, constructor.arity_type)?;
                     }
                 }
                 write!(f, ".")

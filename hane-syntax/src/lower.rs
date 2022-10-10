@@ -5,13 +5,14 @@ use std::{
 
 use crate::{
     Binder, Command, CommandVariant, Expr, ExprVariant, LoweredCommand, LoweredCommandVariant,
-    Span, SpanError,
+    Span, SpanError, LoweredIndBody, LoweredIndConstructor,
 };
 use hane_kernel::{Sort, Stack, Term, TermVariant};
 
 pub enum LoweringError {
     NameNotFree(String),
     UnknownVariable(String),
+    ParamsMustMatch,
 }
 
 impl Display for LoweringError {
@@ -19,6 +20,7 @@ impl Display for LoweringError {
         match self {
             LoweringError::NameNotFree(x) => write!(f, "A constant named `{x}` already exists"),
             LoweringError::UnknownVariable(x) => write!(f, "Unknown variable `{x}`"),
+            LoweringError::ParamsMustMatch => write!(f, "Parameters must be syntactically the same on all mutually defined types"),
         }
     }
 }
@@ -30,6 +32,21 @@ impl Display for LoweredCommand {
                 write!(f, "Definition {name} : {ttype} := {value}.")
             }
             LoweredCommandVariant::Axiom(name, ttype) => write!(f, "Axiom {name} : {ttype}."),
+            LoweredCommandVariant::Inductive(params, bodies) => {
+                let mut sep = "Inductive";
+                for body in bodies {
+                    write!(f, "{sep} {}", body.name)?;
+                    sep = "\n    with";
+                    for (_, param) in params {
+                        write!(f, " ({param})")?;
+                    }
+                    write!(f, " : {} :=", body.ttype)?;
+                    for constructor in &body.constructors {
+                        write!(f, "\n    | {} : {}", constructor.name, constructor.ttype)?;
+                    }
+                }
+                write!(f, ".")
+            }
         }
     }
 }
@@ -63,6 +80,60 @@ impl Command {
                 let ttype = ttype.lower(global, &mut names)?;
                 global.insert(name.clone());
                 LoweredCommandVariant::Axiom(name, ttype)
+            },
+            CommandVariant::Inductive(mut bodies) => {
+                let params = std::mem::take(&mut bodies[0].params);
+                bodies.iter()
+                    .skip(1)
+                    .map(|body|&body.params)
+                    .try_for_each(|ps|
+                        if &params == ps {
+                            Ok(())
+                        } else {
+                            Err(SpanError { span: self.span.clone(), err: LoweringError::ParamsMustMatch })
+                        }
+                    )?;
+
+                let mut lowered_params = Vec::with_capacity(params.len());
+                for param in params {
+                    lowered_params.push((param.name.clone(), param.ttype.lower(global, &mut names)?));
+                    names.push(param.name);
+                }
+
+                let body_types = bodies.iter_mut()
+                    .map(|body|{
+                        let span = body.ttype.span.clone();
+                        std::mem::replace(&mut body.ttype, Expr { span, variant: Box::new(ExprVariant::Sort(crate::Sort::Prop)) })
+                    })
+                    .map(|ttype|ttype.lower(global, &mut names))
+                    .collect::<Result<Vec<_>, _>>()?;
+                for body in &bodies {
+                    if !global.insert(body.name.clone()) {
+                        return Err(SpanError { span: self.span.clone(), err: LoweringError::NameNotFree(body.name.clone()) })
+                    }
+                }
+
+                let lowered_bodies = bodies.into_iter().zip(body_types)
+                    .map(|(body, ttype)| {
+                        let constructors = body.constructors.into_iter()
+                            .map(|constructor| {
+                                Ok(LoweredIndConstructor {
+                                    name: constructor.name,
+                                    ttype: constructor.ttype.lower(global, &mut names)?,
+                                })
+                            }).collect::<Result<_, SpanError<LoweringError>>>()?;
+                        Ok(LoweredIndBody { name: body.name, ttype, constructors })
+                    })
+                    .collect::<Result<Vec<_>, SpanError<LoweringError>>>()?;
+
+                for body in &lowered_bodies {
+                    for constructor in &body.constructors {
+                        if !global.insert(constructor.name.clone()) {
+                            return Err(SpanError { span: self.span.clone(), err: LoweringError::NameNotFree(constructor.name.clone()) })
+                        }
+                    }
+                }
+                LoweredCommandVariant::Inductive(lowered_params, lowered_bodies)
             }
         };
         Ok(LoweredCommand {

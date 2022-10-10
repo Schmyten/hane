@@ -3,4 +3,4 @@
 1 | Definitionx:Prop:=Prop
   | ^
   |
-  = parsing error: expected EOI, keyword_definition, or keyword_axiom
+  = parsing error: expected EOI, keyword_definition, keyword_axiom, or keyword_inductive
