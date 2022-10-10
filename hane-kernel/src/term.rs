@@ -411,7 +411,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 variant: Box::new(TermVariant::Sort(sort.ttype())),
             },
             TermVariant::Var(n) => {
-                return lenv.get(*n).map(|e| e.ttype.push(*n)).ok_or_else(|| {
+                return lenv.get(*n).map(|e| e.ttype.push(*n+1)).ok_or_else(|| {
                     (
                         self.meta.clone(),
                         TypeError::new(lenv, TypeErrorVariant::DebruijnOutOfScope(*n)),
