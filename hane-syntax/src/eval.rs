@@ -14,7 +14,7 @@ impl Display for EvalError {
                 write!(f, "The name `{name}` has already been defined")
             }
             EvalError::CommandError(CommandError::TypeError(err)) => {
-                let mut names = err.bindings();
+                let mut names = err.bindings.clone();
                 match &err.variant {
                     TypeErrorVariant::NotSubtypeType(expected, actual) => {
                         writeln!(f, "Invalid Subtype")?;

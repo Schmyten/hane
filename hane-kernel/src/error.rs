@@ -1,4 +1,4 @@
-use crate::{Stack, Term};
+use crate::{Stack, Term, entry::Entry};
 
 pub enum CommandError<M, B> {
     NameAlreadyExists(String),
@@ -6,7 +6,7 @@ pub enum CommandError<M, B> {
 }
 
 pub struct TypeError<M, B> {
-    bindings: Vec<B>,
+    pub bindings: Stack<B>,
     pub variant: TypeErrorVariant<M, B>,
 }
 
@@ -19,23 +19,11 @@ pub enum TypeErrorVariant<M, B> {
     UndefinedConst(String),
 }
 
-impl<M, B> TypeError<M, B> {
-    pub fn new(variant: TypeErrorVariant<M, B>) -> Self {
+impl<M, B: Clone> TypeError<M, B> {
+    pub fn new(lenv: &mut Stack<Entry<M, B>>, variant: TypeErrorVariant<M, B>) -> Self {
         TypeError {
-            bindings: Vec::new(),
+            bindings: lenv.iter().rev().map(|entry|entry.x.clone()).collect(),
             variant,
         }
-    }
-
-    pub fn bind(mut self, bind: B) -> Self {
-        self.bindings.push(bind);
-        self
-    }
-
-    pub fn bindings(&self) -> Stack<B>
-    where
-        B: Clone,
-    {
-        self.bindings.iter().rev().cloned().collect()
     }
 }

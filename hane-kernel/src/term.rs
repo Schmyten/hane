@@ -243,15 +243,15 @@ impl<M: Clone, B: Clone> Term<M, B> {
                         continue;
                     }
                 }
-                TermVariant::Product(_name, input_type, output_type) => {
+                TermVariant::Product(x, input_type, output_type) => {
                     input_type.normalize(global, lenv);
-                    lenv.push(Entry::new(input_type.clone()));
+                    lenv.push(Entry::new(x.clone(), input_type.clone()));
                     output_type.normalize(global, lenv);
                     lenv.pop();
                 }
-                TermVariant::Abstract(_name, input_type, body) => {
+                TermVariant::Abstract(x, input_type, body) => {
                     input_type.normalize(global, lenv);
-                    lenv.push(Entry::new(input_type.clone()));
+                    lenv.push(Entry::new(x.clone(), input_type.clone()));
                     body.normalize(global, lenv);
                     lenv.pop();
                 }
@@ -312,7 +312,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
         if this == other {
             Ok(())
         } else {
-            Err(TypeError::new(TypeErrorVariant::IncompatibleTypes(
+            Err(TypeError::new(lenv, TypeErrorVariant::IncompatibleTypes(
                 other.clone(),
                 self.clone(),
             )))
@@ -344,7 +344,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
         if this.subtype_inner(&other, global) {
             Ok(())
         } else {
-            Err(TypeError::new(TypeErrorVariant::IncompatibleTypes(
+            Err(TypeError::new(lenv, TypeErrorVariant::IncompatibleTypes(
                 other.clone(),
                 self.clone(),
             )))
@@ -361,7 +361,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
         if let TermVariant::Sort(sort) = *t.variant {
             Ok(sort)
         } else {
-            Err(TypeError::new(TypeErrorVariant::NotASort(self.clone())))
+            Err(TypeError::new(lenv, TypeErrorVariant::NotASort(self.clone())))
         }
     }
 
@@ -374,7 +374,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
         if let TermVariant::Product(_, input_type, output_type) = *self.variant {
             Ok((input_type, output_type))
         } else {
-            Err(TypeError::new(TypeErrorVariant::NotASort(self)))
+            Err(TypeError::new(lenv, TypeErrorVariant::NotASort(self)))
         }
     }
 
@@ -392,7 +392,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 return lenv.get(*n).map(|e| e.ttype.push(*n)).ok_or_else(|| {
                     (
                         self.meta.clone(),
-                        TypeError::new(TypeErrorVariant::DebruijnOutOfScope(*n)),
+                        TypeError::new(lenv, TypeErrorVariant::DebruijnOutOfScope(*n)),
                     )
                 })
             }
@@ -403,7 +403,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                     .ok_or_else(|| {
                         (
                             self.meta.clone(),
-                            TypeError::new(TypeErrorVariant::UndefinedConst(name.clone())),
+                            TypeError::new(lenv, TypeErrorVariant::UndefinedConst(name.clone())),
                         )
                     })
             }
@@ -422,10 +422,10 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 let x_sort = x_sort
                     .expect_sort(global, lenv)
                     .map_err(|err| (x_tp.meta.clone(), err))?;
-                lenv.push(Entry::new(x_tp.clone()));
+                lenv.push(Entry::new(x.clone(), x_tp.clone()));
                 let t_tp = t.type_check(global, lenv);
                 lenv.pop();
-                let t_tp = t_tp.map_err(|(meta, err)| (meta, err.bind(x.clone())))?;
+                let t_tp = t_tp?;
                 let t_sort = t_tp
                     .expect_sort(global, lenv)
                     .map_err(|err| (t.meta.clone(), err))?;
@@ -439,10 +439,10 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 x_sort
                     .expect_sort(global, lenv)
                     .map_err(|err| (x_tp.meta.clone(), err))?;
-                lenv.push(Entry::new(x_tp.clone()));
+                lenv.push(Entry::new(x.clone(), x_tp.clone()));
                 let t_tp = t.type_check(global, lenv);
                 lenv.pop();
-                let t_tp = t_tp.map_err(|(meta, err)| (meta, err.bind(x.clone())))?;
+                let t_tp = t_tp?;
                 Term {
                     meta: self.meta.clone(),
                     variant: Box::new(TermVariant::Product(x.clone(), x_tp.clone(), t_tp)),
@@ -458,10 +458,10 @@ impl<M: Clone, B: Clone> Term<M, B> {
                     .expect_subtype(x_tp, global, lenv)
                     .map_err(|err| (x_val.meta.clone(), err))?;
                 let t_subst = t.subst_single(0, x_val);
-                lenv.push(Entry::new(x_tp.clone()));
+                lenv.push(Entry::new(x.clone(), x_tp.clone()));
                 let t_tp = t_subst.type_check(global, lenv);
                 lenv.pop();
-                t_tp.map_err(|(meta, err)| (meta, err.bind(x.clone())))?
+                t_tp?
             }
         })
     }

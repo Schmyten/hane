@@ -1,6 +1,7 @@
 use crate::term::Term;
 
 pub struct Entry<M, B> {
+    pub x: B,
     pub value: Option<Term<M, B>>,
     pub ttype: Term<M, B>,
 }
@@ -11,12 +12,12 @@ pub struct EntryRef<'a, M, B> {
 }
 
 impl<M, B> Entry<M, B> {
-    pub fn new(ttype: Term<M, B>) -> Self {
-        Entry { value: None, ttype }
+    pub fn new(x: B, ttype: Term<M, B>) -> Self {
+        Entry { x, value: None, ttype }
     }
     
-    pub fn with_value(value: Term<M, B>, ttype: Term<M, B>) -> Self {
-        Entry { value: Some(value), ttype }
+    pub fn with_value(x: B, value: Term<M, B>, ttype: Term<M, B>) -> Self {
+        Entry { x, value: Some(value), ttype }
     }
 }
 
