@@ -50,7 +50,9 @@ impl<M: Clone, B: Clone> Global<M, B> {
 
     pub fn get(&self, name: &str) -> Option<EntryRef<M, B>> {
         self.env.iter().find_map(|(_, entry)| match entry {
-            GEntry::Definition(x, ttype, value) => (x == name).then_some(EntryRef::with_value(value, ttype)),
+            GEntry::Definition(x, ttype, value) => {
+                (x == name).then_some(EntryRef::with_value(value, ttype))
+            }
             GEntry::Axiom(x, ttype) => (x == name).then_some(EntryRef::new(ttype)),
         })
     }
@@ -63,7 +65,8 @@ impl<M: Clone, B: Clone> Global<M, B> {
         value: Term<M, B>,
     ) -> Result<(), (M, CommandError<M, B>)> {
         self.free(&name).map_err(|err| (meta.clone(), err))?;
-        let mut lenv = Stack::new();
+        let mut buf = Vec::new();
+        let mut lenv = Stack::new(&mut buf);
         let sort = ttype
             .type_check(self, &mut lenv)
             .map_err(|(meta, err)| (meta, CommandError::TypeError(err)))?;
@@ -87,7 +90,8 @@ impl<M: Clone, B: Clone> Global<M, B> {
         ttype: Term<M, B>,
     ) -> Result<(), (M, CommandError<M, B>)> {
         self.free(&name).map_err(|err| (meta.clone(), err))?;
-        let mut lenv = Stack::new();
+        let mut buf = Vec::new();
+        let mut lenv = Stack::new(&mut buf);
         let sort = ttype
             .type_check(self, &mut lenv)
             .map_err(|(meta, err)| (meta, CommandError::TypeError(err)))?;

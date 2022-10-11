@@ -1,7 +1,7 @@
 use std::fmt::{self, Display, Formatter};
 
 use crate::{print::write_term, LoweredCommand, LoweredCommandVariant, Span, SpanError};
-use hane_kernel::{CommandError, Global, TypeErrorVariant};
+use hane_kernel::{CommandError, Global, Stack, TypeErrorVariant};
 
 pub enum EvalError {
     CommandError(CommandError<Span, String>),
@@ -15,6 +15,7 @@ impl Display for EvalError {
             }
             EvalError::CommandError(CommandError::TypeError(err)) => {
                 let mut names = err.bindings.clone();
+                let mut names = Stack::new(&mut names);
                 match &err.variant {
                     TypeErrorVariant::NotSubtypeType(expected, actual) => {
                         writeln!(f, "Invalid Subtype")?;

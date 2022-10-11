@@ -55,10 +55,10 @@ pub fn write_term<M>(
             write!(buf, "forall {x} : ")?;
             write_term(buf, x_tp, names, 200)?;
             write!(buf, ", ")?;
-            names.push(x);
-            let r = write_term(buf, t, names, 200);
-            names.pop();
-            r?;
+            {
+                let mut names = names.push(x);
+                write_term(buf, t, &mut names, 200)?
+            }
             if level < 200 {
                 write!(buf, ")")?;
             }
@@ -72,10 +72,10 @@ pub fn write_term<M>(
             write!(buf, "fun {x} : ")?;
             write_term(buf, x_tp, names, 200)?;
             write!(buf, " => ")?;
-            names.push(x);
-            let r = write_term(buf, t, names, 200);
-            names.pop();
-            r?;
+            {
+                let mut names = names.push(x);
+                write_term(buf, t, &mut names, 200)?
+            }
             if level < 200 {
                 write!(buf, ")")?;
             }
@@ -91,10 +91,10 @@ pub fn write_term<M>(
             write!(buf, " := ")?;
             write_term(buf, x_val, names, 200)?;
             write!(buf, " in ")?;
-            names.push(x);
-            let r = write_term(buf, t, names, 200);
-            names.pop();
-            r?;
+            {
+                let mut names = names.push(x);
+                write_term(buf, t, &mut names, 200)?
+            }
             if level < 200 {
                 write!(buf, ")")?;
             }
