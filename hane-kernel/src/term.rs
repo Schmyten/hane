@@ -438,10 +438,8 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 x_sort
                     .expect_sort(global, lenv)
                     .map_err(|err| (x_tp.meta.clone(), err))?;
-                let t_tp = {
-                    let mut lenv = lenv.push(Entry::new(x.clone(), x_tp.clone()));
-                    t.type_check(global, &mut lenv)?
-                };
+                let mut lenv = lenv.push(Entry::new(x.clone(), x_tp.clone()));
+                let t_tp = t.type_check(global, &mut lenv)?;
                 Term {
                     meta: self.meta.clone(),
                     variant: Box::new(TermVariant::Product(x.clone(), x_tp.clone(), t_tp)),
