@@ -60,9 +60,11 @@ impl<T> Stack<T> {
 
     /// Creatests a new stack slot with ownership of all elements added trough it.
     /// These elements are removed from the stack when the slot is dropped.
-    #[must_use]
     pub fn slot(&mut self) -> StackSlot<T> {
-        StackSlot { slot: self.len(), stack: ManuallyDrop::new(self) }
+        StackSlot {
+            slot: self.len(),
+            stack: ManuallyDrop::new(self),
+        }
     }
 
     /// Creates a new stack slot with a single element
