@@ -1,5 +1,9 @@
 [workspace]
-members = ["hane-kernel", "hane-syntax"]
+members = [
+    "hane-kernel",
+    "hane-unify",
+    "hane-syntax",
+]
 
 [package]
 name = "hane"
