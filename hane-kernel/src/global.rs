@@ -89,8 +89,7 @@ impl<M: Clone, B: Clone> Global<M, B> {
         ttype: Term<M, B>,
     ) -> Result<(), (M, CommandError<M, B>)> {
         self.free(&name).map_err(|err| (meta.clone(), err))?;
-        let mut stack = Stack::new();
-        let mut lenv = stack.slot();
+        let mut lenv = Stack::new();
         let sort = ttype
             .type_check(self, &mut lenv)
             .map_err(|(meta, err)| (meta, CommandError::TypeError(err)))?;
