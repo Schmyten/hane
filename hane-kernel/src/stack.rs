@@ -2,7 +2,7 @@ use std::iter::Rev;
 use std::mem::ManuallyDrop;
 
 /// A stack separated into sections called slots. Each `Stack<'a, T>` represents one such slot.
-/// When a slot is droped so is all the elements of that section.
+/// When a slot is dropped, so are all the elements of that section.
 pub struct Stack<'a, T> {
     buf: ManuallyDrop<&'a mut Vec<T>>,
     /// The starting index of this stack slot
@@ -56,7 +56,7 @@ impl<'a, T> Stack<'a, T> {
     /// Removes all elements of this slot from the stack and returns an iterator over them
     pub fn pop(mut self) -> Rev<std::vec::Drain<'a, T>> {
         let slot = self.slot;
-        // Safety: `buf` is leaked immediately after `ManuallyDrop::take`. It can therefor not be
+        // Safety: `buf` is leaked immediately after `ManuallyDrop::take`. It can therefore not be
         // used again. Not even in the drop implementation
         let buf = unsafe {
             let buf = ManuallyDrop::take(&mut self.buf);
