@@ -13,11 +13,19 @@ pub struct EntryRef<'a, M, B> {
 
 impl<M, B> Entry<M, B> {
     pub fn new(x: B, ttype: Term<M, B>) -> Self {
-        Entry { x, value: None, ttype }
+        Entry {
+            x,
+            value: None,
+            ttype,
+        }
     }
-    
+
     pub fn with_value(x: B, value: Term<M, B>, ttype: Term<M, B>) -> Self {
-        Entry { x, value: Some(value), ttype }
+        Entry {
+            x,
+            value: Some(value),
+            ttype,
+        }
     }
 }
 
@@ -25,8 +33,11 @@ impl<'a, M, B> EntryRef<'a, M, B> {
     pub fn new(ttype: &'a Term<M, B>) -> Self {
         EntryRef { value: None, ttype }
     }
-    
+
     pub fn with_value(value: &'a Term<M, B>, ttype: &'a Term<M, B>) -> Self {
-        EntryRef { value: Some(value), ttype }
+        EntryRef {
+            value: Some(value),
+            ttype,
+        }
     }
 }

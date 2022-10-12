@@ -1,4 +1,4 @@
-use crate::{Stack, Term, entry::Entry};
+use crate::{entry::Entry, Stack, Term};
 
 pub enum CommandError<M, B> {
     NameAlreadyExists(String),
@@ -22,7 +22,7 @@ pub enum TypeErrorVariant<M, B> {
 impl<M, B: Clone> TypeError<M, B> {
     pub fn new(lenv: &mut Stack<Entry<M, B>>, variant: TypeErrorVariant<M, B>) -> Self {
         TypeError {
-            bindings: lenv.iter().rev().map(|entry|entry.x.clone()).collect(),
+            bindings: lenv.iter().rev().map(|entry| entry.x.clone()).collect(),
             variant,
         }
     }

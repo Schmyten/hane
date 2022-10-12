@@ -50,7 +50,9 @@ impl<M: Clone, B: Clone> Global<M, B> {
 
     pub fn get(&self, name: &str) -> Option<EntryRef<M, B>> {
         self.env.iter().find_map(|(_, entry)| match entry {
-            GEntry::Definition(x, ttype, value) => (x == name).then_some(EntryRef::with_value(value, ttype)),
+            GEntry::Definition(x, ttype, value) => {
+                (x == name).then_some(EntryRef::with_value(value, ttype))
+            }
             GEntry::Axiom(x, ttype) => (x == name).then_some(EntryRef::new(ttype)),
         })
     }

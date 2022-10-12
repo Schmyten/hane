@@ -312,10 +312,10 @@ impl<M: Clone, B: Clone> Term<M, B> {
         if this == other {
             Ok(())
         } else {
-            Err(TypeError::new(lenv, TypeErrorVariant::IncompatibleTypes(
-                other.clone(),
-                self.clone(),
-            )))
+            Err(TypeError::new(
+                lenv,
+                TypeErrorVariant::IncompatibleTypes(other.clone(), self.clone()),
+            ))
         }
     }
 
@@ -344,10 +344,10 @@ impl<M: Clone, B: Clone> Term<M, B> {
         if this.subtype_inner(&other, global) {
             Ok(())
         } else {
-            Err(TypeError::new(lenv, TypeErrorVariant::IncompatibleTypes(
-                other.clone(),
-                self.clone(),
-            )))
+            Err(TypeError::new(
+                lenv,
+                TypeErrorVariant::IncompatibleTypes(other.clone(), self.clone()),
+            ))
         }
     }
 
@@ -361,7 +361,10 @@ impl<M: Clone, B: Clone> Term<M, B> {
         if let TermVariant::Sort(sort) = *t.variant {
             Ok(sort)
         } else {
-            Err(TypeError::new(lenv, TypeErrorVariant::NotASort(self.clone())))
+            Err(TypeError::new(
+                lenv,
+                TypeErrorVariant::NotASort(self.clone()),
+            ))
         }
     }
 
