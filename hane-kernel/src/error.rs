@@ -7,7 +7,7 @@ pub enum CommandError<M, B> {
 
 pub struct TypeError<M, B> {
     /// the local binding context of the terms in the error
-    pub bindings: Vec<B>,
+    pub bindings: Stack<B>,
     pub variant: TypeErrorVariant<M, B>,
 }
 

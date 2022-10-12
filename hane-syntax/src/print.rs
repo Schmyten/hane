@@ -1,6 +1,6 @@
 use std::fmt::{self, Write};
 
-use hane_kernel::{stack::Stack, term::TermVariant};
+use hane_kernel::{term::TermVariant, Stack};
 
 type Term<M> = hane_kernel::term::Term<M, String>;
 

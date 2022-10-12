@@ -39,8 +39,7 @@ impl Command {
         self,
         global: &mut HashSet<String>,
     ) -> Result<LoweredCommand, SpanError<LoweringError>> {
-        let mut buf = Vec::new();
-        let mut names = Stack::new(&mut buf);
+        let mut names = Stack::new();
         let variant = match self.variant {
             CommandVariant::Definition(name, ttype, value) => {
                 if global.contains(&name) {
@@ -98,11 +97,11 @@ impl Expr {
             }
             ExprVariant::Product(binders, t) => {
                 let mut type_stack = Vec::new();
-                let mut names = names.new_slot();
+                let mut names = names.slot();
                 for Binder { name, ttype } in binders {
                     let lowered_type = ttype.lower(global, &mut names)?;
                     type_stack.push(lowered_type);
-                    names.push_on_slot(name);
+                    names.push_onto(name);
                 }
                 let t = t.lower(global, &mut names)?;
                 let mut iter = names.pop().zip(type_stack.into_iter().rev());
@@ -116,11 +115,11 @@ impl Expr {
             }
             ExprVariant::Abstract(binders, t) => {
                 let mut type_stack = Vec::new();
-                let mut names = names.new_slot();
+                let mut names = names.slot();
                 for Binder { name, ttype } in binders {
                     let lowered_type = ttype.lower(global, &mut names)?;
                     type_stack.push(lowered_type);
-                    names.push_on_slot(name);
+                    names.push_onto(name);
                 }
                 let t = t.lower(global, &mut names)?;
                 let mut iter = names.pop().zip(type_stack.into_iter().rev());
