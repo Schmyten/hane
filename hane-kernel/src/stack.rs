@@ -1,4 +1,3 @@
-use std::iter::Rev;
 use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
 
@@ -54,7 +53,7 @@ impl<T> Stack<T> {
 
     /// Returns an iterator over the stack.
     /// The iterator yields all items from newest to oldest.
-    pub fn iter(&self) -> Rev<std::slice::Iter<T>> {
+    pub fn iter(&self) -> impl DoubleEndedIterator<Item = &T> {
         self.0.iter().rev()
     }
 
@@ -121,7 +120,7 @@ impl<'a, T> StackSlot<'a, T> {
     }
 
     /// Removes all elements of this slot from the stack and returns an iterator over them
-    pub fn pop(mut self) -> Rev<std::vec::Drain<'a, T>> {
+    pub fn pop(mut self) -> impl DoubleEndedIterator<Item = T> + 'a {
         let slot = self.slot;
         // Safety: `buf` is forgotten immediately after `ManuallyDrop::take`. It can therefore not be
         // used again. Not even in the drop implementation
