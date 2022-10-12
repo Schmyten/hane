@@ -423,12 +423,10 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 let x_sort = x_sort
                     .expect_sort(global, lenv)
                     .map_err(|err| (x_tp.meta.clone(), err))?;
-                let t_tp = {
-                    let mut lenv = lenv.push(Entry::new(x.clone(), x_tp.clone()));
-                    t.type_check(global, &mut lenv)?
-                };
+                let mut lenv = lenv.push(Entry::new(x.clone(), x_tp.clone()));
+                let t_tp = t.type_check(global, &mut lenv)?;
                 let t_sort = t_tp
-                    .expect_sort(global, lenv)
+                    .expect_sort(global, &mut lenv)
                     .map_err(|err| (t.meta.clone(), err))?;
                 Term {
                     meta: self.meta.clone(),
