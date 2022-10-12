@@ -45,7 +45,6 @@ impl<T> Stack<T> {
     }
 
     /// Returns true if the stack contains an element with the given value.
-    /// The iterator yields all items from newest to oldest.
     pub fn contains(&self, x: &T) -> bool
     where
         T: PartialEq,
@@ -54,11 +53,12 @@ impl<T> Stack<T> {
     }
 
     /// Returns an iterator over the stack.
+    /// The iterator yields all items from newest to oldest.
     pub fn iter(&self) -> Rev<std::slice::Iter<T>> {
         self.0.iter().rev()
     }
 
-    /// Creatests a new stack slot with ownership of all elements added trough it.
+    /// Creates a new stack slot with ownership of all elements added trough it.
     /// These elements are removed from the stack when the slot is dropped.
     pub fn slot(&mut self) -> StackSlot<T> {
         StackSlot {
@@ -86,7 +86,7 @@ impl<T> FromIterator<T> for Stack<T> {
 
 /// A section of a stack called a slot.
 /// When the slot is dropped, all elements of the section are removed and dropped from the stack.
-/// When creating a new slot through an existing slot, then the old slot becomes inaccepable untill the new slot is dropped.
+/// When creating a new slot through an existing slot, then the old slot becomes inaccessible until the new slot is dropped.
 #[must_use]
 pub struct StackSlot<'a, T> {
     stack: ManuallyDrop<&'a mut Stack<T>>,
