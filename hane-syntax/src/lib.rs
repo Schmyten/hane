@@ -52,6 +52,7 @@ pub enum CommandVariant {
     Inductive(Vec<IndBody>),
 }
 
+/// A single type in a mutually defined inductive type set
 pub struct IndBody {
     pub name: String,
     pub params: Vec<Binder>,

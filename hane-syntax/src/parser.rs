@@ -77,6 +77,7 @@ pub fn parse_command(pair: Pair) -> Command {
             CommandVariant::Axiom(name, ttype)
         }
         Rule::command_inductive => {
+            // Skips the `Inductive` keyword and steps over the `with` keywords.
             CommandVariant::Inductive(pairs.skip(1).step_by(2).map(parse_ind_body).collect())
         }
         r => unreachable!("{:?}", r),
