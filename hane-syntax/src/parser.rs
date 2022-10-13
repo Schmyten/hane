@@ -1,4 +1,7 @@
-use crate::{Binder, Command, CommandVariant, Expr, ExprVariant, Sort, Span, SpanError, IndBody, IndConstructor};
+use crate::{
+    Binder, Command, CommandVariant, Expr, ExprVariant, IndBody, IndConstructor, Sort, Span,
+    SpanError,
+};
 use pest::Parser;
 use pest_derive::Parser;
 
@@ -72,7 +75,7 @@ pub fn parse_command(pair: Pair) -> Command {
             let name = pairs.next().unwrap().as_str().to_owned();
             let ttype = parse_expr(pairs.next().unwrap());
             CommandVariant::Axiom(name, ttype)
-        },
+        }
         Rule::command_inductive => {
             CommandVariant::Inductive(pairs.skip(1).step_by(2).map(parse_ind_body).collect())
         }
@@ -87,7 +90,10 @@ fn parse_ind_body(pair: Pair) -> IndBody {
     let name = pairs.next().unwrap().as_str().to_owned();
     let params = parse_binders(pairs.next().unwrap());
     let ttype = parse_expr(pairs.next().unwrap());
-    let constructors = pairs.next().unwrap().into_inner()
+    let constructors = pairs
+        .next()
+        .unwrap()
+        .into_inner()
         .map(|pair| {
             debug_assert_eq!(pair.as_rule(), Rule::inductive_constructor);
             let mut pairs = pair.into_inner();
@@ -97,7 +103,12 @@ fn parse_ind_body(pair: Pair) -> IndBody {
         })
         .collect();
 
-    IndBody { name, params, ttype, constructors }
+    IndBody {
+        name,
+        params,
+        ttype,
+        constructors,
+    }
 }
 
 fn parse_expr(pair: Pair) -> Expr {
@@ -179,7 +190,10 @@ fn parse_sort(pair: Pair) -> Sort {
 
 fn parse_binders(pair: Pair) -> Vec<Binder> {
     let rule = pair.as_rule();
-    debug_assert!(rule == Rule::binders_opt || rule == Rule::binders, "{rule:?}");
+    debug_assert!(
+        rule == Rule::binders_opt || rule == Rule::binders,
+        "{rule:?}"
+    );
     pair.into_inner()
         .map(|p| {
             debug_assert_eq!(p.as_rule(), Rule::binder_base);
