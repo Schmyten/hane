@@ -61,7 +61,11 @@ impl<M, B> Display for GEntry<M, B> {
                     }
                     write!(f, " : {} :=", body.arity_type)?;
                     for constructor in &body.constructors {
-                        write!(f, "\n    | {} : {}", constructor.name, constructor.arity_type)?;
+                        write!(
+                            f,
+                            "\n    | {} : {}",
+                            constructor.name, constructor.arity_type
+                        )?;
                     }
                 }
                 write!(f, ".")
@@ -119,7 +123,8 @@ impl<M: Clone, B: Clone> Global<M, B> {
         ttype: Term<M, B>,
         value: Term<M, B>,
     ) -> Result<(), (M, CommandError<M, B>)> {
-        self.expect_fresh(&name).map_err(|err| (meta.clone(), err))?;
+        self.expect_fresh(&name)
+            .map_err(|err| (meta.clone(), err))?;
         let mut lenv = Stack::new();
         let sort = ttype
             .type_check(self, &mut lenv)
@@ -143,7 +148,8 @@ impl<M: Clone, B: Clone> Global<M, B> {
         name: String,
         ttype: Term<M, B>,
     ) -> Result<(), (M, CommandError<M, B>)> {
-        self.expect_fresh(&name).map_err(|err| (meta.clone(), err))?;
+        self.expect_fresh(&name)
+            .map_err(|err| (meta.clone(), err))?;
         let mut lenv = Stack::new();
         let sort = ttype
             .type_check(self, &mut lenv)
@@ -185,7 +191,7 @@ impl<M: Clone, B: Clone> Global<M, B> {
                 .map_err(|(meta, err)| (meta, CommandError::TypeError(err)))?;
             ttype
                 .expect_sort(self, &mut lenv)
-                .map_err(|err|(param.meta.clone(), CommandError::TypeError(err)))?;
+                .map_err(|err| (param.meta.clone(), CommandError::TypeError(err)))?;
             lenv.push(Entry::new(x.clone(), param.clone()));
         }
 
