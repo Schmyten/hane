@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::fmt::{self, Display, Formatter};
 
-use crate::entry::{Entry, EntryRef};
+use crate::entry::{Binder, Entry, EntryRef};
 use crate::{Global, Sort, Stack, TypeError, TypeErrorVariant};
 
 #[derive(Clone)]
@@ -351,10 +351,10 @@ impl<M: Clone, B: Clone> Term<M, B> {
         }
     }
 
-    pub fn strip_products(mut self) -> (Vec<(B, Self)>, Self) {
+    pub fn strip_products(mut self) -> (Vec<Binder<M, B>>, Self) {
         let mut arity = Vec::new();
         while let TermVariant::Product(x, ttype, body) = *self.variant {
-            arity.push((x, ttype));
+            arity.push(Binder { x, ttype });
             self = body
         }
         (arity, self)
@@ -411,7 +411,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 variant: Box::new(TermVariant::Sort(sort.ttype())),
             },
             TermVariant::Var(n) => {
-                return lenv.get(*n).map(|e| e.ttype.push(*n+1)).ok_or_else(|| {
+                return lenv.get(*n).map(|e| e.ttype.push(*n + 1)).ok_or_else(|| {
                     (
                         self.meta.clone(),
                         TypeError::new(lenv, TypeErrorVariant::DebruijnOutOfScope(*n)),

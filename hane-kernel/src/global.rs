@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::fmt::{self, Display, Formatter};
 
-use crate::entry::{Entry, EntryRef};
+use crate::entry::{Binder, EntryRef};
 use crate::{CommandError, Sort, Stack, Term, TermVariant, TypeError, TypeErrorVariant};
 
 #[derive(Default)]
@@ -12,12 +12,12 @@ pub struct Global<M, B> {
 enum GEntry<M, B> {
     Definition(String, Term<M, B>, Term<M, B>),
     Axiom(String, Term<M, B>),
-    Inductive(Vec<(B, Term<M, B>)>, Vec<IndBody<M, B>>),
+    Inductive(Vec<Binder<M, B>>, Vec<IndBody<M, B>>),
 }
 
 struct IndBody<M, B> {
     name: String,
-    arity: Vec<(B, Term<M, B>)>,
+    arity: Vec<Binder<M, B>>,
     sort: Sort,
     /// Shorthand for `∀ arity.., sort`
     arity_type: Term<M, B>,
@@ -28,7 +28,7 @@ struct IndBody<M, B> {
 
 struct IndConstructor<M, B> {
     name: String,
-    arity: Vec<(B, Term<M, B>)>,
+    arity: Vec<Binder<M, B>>,
     ttype: Term<M, B>,
     /// Shorthand for `∀ arity.., ttype`
     arity_type: Term<M, B>,
@@ -56,8 +56,8 @@ impl<M, B> Display for GEntry<M, B> {
                 for body in bodies {
                     write!(f, "{pre} {}", body.name)?;
                     pre = "\n    with";
-                    for (_, param) in params {
-                        write!(f, " ({param})")?;
+                    for param in params {
+                        write!(f, " ({})", param.ttype)?;
                     }
                     write!(f, " : {} :=", body.arity_type)?;
                     for constructor in &body.constructors {
@@ -163,7 +163,7 @@ impl<M: Clone, B: Clone> Global<M, B> {
     pub fn inductive(
         &mut self,
         meta: M,
-        params: Vec<(B, Term<M, B>)>,
+        params: Vec<Binder<M, B>>,
         bodies: Vec<(String, Term<M, B>, Vec<(String, Term<M, B>)>)>,
     ) -> Result<(), (M, CommandError<M, B>)> {
         let mut names = HashSet::new();
@@ -185,14 +185,15 @@ impl<M: Clone, B: Clone> Global<M, B> {
         let mut constructors = Vec::with_capacity(bodies.len());
         let mut lenv = Stack::new();
 
-        for (x, param) in &params {
+        for param in &params {
             let ttype = param
+                .ttype
                 .type_check(self, &mut lenv)
                 .map_err(|(meta, err)| (meta, CommandError::TypeError(err)))?;
             ttype
                 .expect_sort(self, &mut lenv)
-                .map_err(|err| (param.meta.clone(), CommandError::TypeError(err)))?;
-            lenv.push(Entry::new(x.clone(), param.clone()));
+                .map_err(|err| (param.ttype.meta.clone(), CommandError::TypeError(err)))?;
+            lenv.push(param.clone().into());
         }
 
         for (name, arity_type, cs) in bodies {
@@ -218,15 +219,14 @@ impl<M: Clone, B: Clone> Global<M, B> {
                 ));
             };
 
-            let full_type =
-                params
-                    .iter()
-                    .cloned()
-                    .rev()
-                    .fold(arity_type.clone(), |body, (x, ttype)| Term {
-                        meta: body.meta.clone(),
-                        variant: Box::new(TermVariant::Product(x, ttype, body)),
-                    });
+            let full_type = params
+                .iter()
+                .cloned()
+                .rev()
+                .fold(arity_type.clone(), |body, param| Term {
+                    meta: body.meta.clone(),
+                    variant: Box::new(TermVariant::Product(param.x, param.ttype, body)),
+                });
 
             ind_bodies.push(IndBody {
                 name,
@@ -246,36 +246,41 @@ impl<M: Clone, B: Clone> Global<M, B> {
         }));
 
         for (body, constructors) in ind_bodies.iter_mut().zip(constructors) {
-            body.constructors = constructors
-                .into_iter()
-                .map(|(name, arity_type)| {
-                    let sort = arity_type
-                        .type_check(self, &mut lenv)
-                        .map_err(|(meta, err)| (meta, CommandError::TypeError(err)))?;
-                    let _ = sort
-                        .expect_sort(self, &mut lenv)
-                        .map_err(|err| (arity_type.meta.clone(), CommandError::TypeError(err)))?;
+            body.constructors =
+                constructors
+                    .into_iter()
+                    .map(|(name, arity_type)| {
+                        let sort = arity_type
+                            .type_check(self, &mut lenv)
+                            .map_err(|(meta, err)| (meta, CommandError::TypeError(err)))?;
+                        let _ = sort.expect_sort(self, &mut lenv).map_err(|err| {
+                            (arity_type.meta.clone(), CommandError::TypeError(err))
+                        })?;
 
-                    let mut norm = arity_type.clone();
-                    norm.normalize(self, &mut lenv);
-                    let (arity, ttype) = norm.strip_products();
-                    let full_type = params.iter().cloned().rev().fold(
-                        arity_type.clone(),
-                        |body, (x, ttype)| Term {
-                            meta: body.meta.clone(),
-                            variant: Box::new(TermVariant::Product(x, ttype, body)),
-                        },
-                    );
+                        let mut norm = arity_type.clone();
+                        norm.normalize(self, &mut lenv);
+                        let (arity, ttype) = norm.strip_products();
+                        let full_type = params.iter().cloned().rev().fold(
+                            arity_type.clone(),
+                            |body, binder| Term {
+                                meta: body.meta.clone(),
+                                variant: Box::new(TermVariant::Product(
+                                    binder.x,
+                                    binder.ttype,
+                                    body,
+                                )),
+                            },
+                        );
 
-                    Ok(IndConstructor {
-                        name,
-                        arity,
-                        ttype,
-                        arity_type,
-                        full_type,
+                        Ok(IndConstructor {
+                            name,
+                            arity,
+                            ttype,
+                            arity_type,
+                            full_type,
+                        })
                     })
-                })
-                .collect::<Result<_, (M, CommandError<M, B>)>>()?;
+                    .collect::<Result<_, (M, CommandError<M, B>)>>()?;
         }
 
         self.env.truncate(self.env.len() - ind_bodies.len());

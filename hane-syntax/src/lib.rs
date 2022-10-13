@@ -5,6 +5,7 @@ pub mod print;
 
 use std::fmt::{self, Display, Write};
 
+use hane_kernel::entry::Binder as LoweredBinder;
 use hane_kernel::Term;
 
 #[derive(Clone, Copy)]
@@ -71,7 +72,7 @@ pub struct LoweredCommand {
 pub enum LoweredCommandVariant {
     Definition(String, Term<Span, String>, Term<Span, String>),
     Axiom(String, Term<Span, String>),
-    Inductive(Vec<(String, Term<Span, String>)>, Vec<LoweredIndBody>),
+    Inductive(Vec<LoweredBinder<Span, String>>, Vec<LoweredIndBody>),
 }
 
 pub struct LoweredIndBody {

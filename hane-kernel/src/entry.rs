@@ -1,5 +1,11 @@
 use crate::term::Term;
 
+#[derive(Clone)]
+pub struct Binder<M, B> {
+    pub x: B,
+    pub ttype: Term<M, B>,
+}
+
 pub struct Entry<M, B> {
     pub x: B,
     pub value: Option<Term<M, B>>,
@@ -39,5 +45,11 @@ impl<'a, M, B> EntryRef<'a, M, B> {
             value: Some(value),
             ttype,
         }
+    }
+}
+
+impl<M, B> From<Binder<M, B>> for Entry<M, B> {
+    fn from(binder: Binder<M, B>) -> Self {
+        Entry::new(binder.x, binder.ttype)
     }
 }
