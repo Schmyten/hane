@@ -86,6 +86,9 @@ impl Command {
                 LoweredCommandVariant::Axiom(name, ttype)
             }
             CommandVariant::Inductive(mut bodies) => {
+                // The parameters must be syntactically the same on all the bodies.
+                // To check this we steal the `params` from the first body and check that it matches all the others.
+                // We can steal it because we won't use `IndBody.params` later, instead we'll use the stolen `param`
                 let params = std::mem::take(&mut bodies[0].params);
                 bodies
                     .iter()
@@ -102,6 +105,7 @@ impl Command {
                         }
                     })?;
 
+                // Next we lower all the parameters and push then into our local name scope
                 let mut lowered_params = Vec::with_capacity(params.len());
                 for param in params {
                     let name = param.name.clone();
@@ -109,6 +113,7 @@ impl Command {
                     names.push(name);
                 }
 
+                // Then we steal and lower all the arity sorts of the types
                 let body_types = bodies
                     .iter_mut()
                     .map(|body| {
@@ -123,6 +128,8 @@ impl Command {
                     })
                     .map(|ttype| ttype.lower(global, &mut names))
                     .collect::<Result<Vec<_>, _>>()?;
+                
+                // With the types sorts lowered we can put the type names into the global name set as they are needed to handle the constructors
                 for body in &bodies {
                     if !global.insert(body.name.clone()) {
                         return Err(SpanError {
@@ -132,6 +139,7 @@ impl Command {
                     }
                 }
 
+                // Then we lower the constructors and build the lowered bodies
                 let lowered_bodies = bodies
                     .into_iter()
                     .zip(body_types)
@@ -154,6 +162,7 @@ impl Command {
                     })
                     .collect::<Result<Vec<_>, SpanError<LoweringError>>>()?;
 
+                // Finally we put the constructors into the global name set
                 for body in &lowered_bodies {
                     for constructor in &body.constructors {
                         if !global.insert(constructor.name.clone()) {
