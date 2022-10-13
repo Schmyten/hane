@@ -75,7 +75,8 @@ impl<M: Clone, B: Clone> Global<M, B> {
         Global { env: Vec::new() }
     }
 
-    pub fn free(&self, name: &str) -> Result<(), CommandError<M, B>> {
+    /// Checks whether `name` is alrady used, returning an error if is.
+    pub fn expect_fresh(&self, name: &str) -> Result<(), CommandError<M, B>> {
         let free = self.env.iter().all(|(_, entry)| match entry {
             GEntry::Definition(x, _, _) => x != name,
             GEntry::Axiom(x, _) => x != name,
@@ -118,7 +119,7 @@ impl<M: Clone, B: Clone> Global<M, B> {
         ttype: Term<M, B>,
         value: Term<M, B>,
     ) -> Result<(), (M, CommandError<M, B>)> {
-        self.free(&name).map_err(|err| (meta.clone(), err))?;
+        self.expect_fresh(&name).map_err(|err| (meta.clone(), err))?;
         let mut lenv = Stack::new();
         let sort = ttype
             .type_check(self, &mut lenv)
@@ -142,7 +143,7 @@ impl<M: Clone, B: Clone> Global<M, B> {
         name: String,
         ttype: Term<M, B>,
     ) -> Result<(), (M, CommandError<M, B>)> {
-        self.free(&name).map_err(|err| (meta.clone(), err))?;
+        self.expect_fresh(&name).map_err(|err| (meta.clone(), err))?;
         let mut lenv = Stack::new();
         let sort = ttype
             .type_check(self, &mut lenv)
@@ -161,13 +162,13 @@ impl<M: Clone, B: Clone> Global<M, B> {
     ) -> Result<(), (M, CommandError<M, B>)> {
         let mut names = HashSet::new();
         for (name, _, constructors) in &bodies {
-            self.free(name).map_err(|err| (meta.clone(), err))?;
+            self.expect_fresh(name).map_err(|err| (meta.clone(), err))?;
             if !names.insert(&**name) {
                 return Err((meta.clone(), CommandError::NameAlreadyExists(name.clone())));
             }
 
             for (name, _) in constructors {
-                self.free(name).map_err(|err| (meta.clone(), err))?;
+                self.expect_fresh(name).map_err(|err| (meta.clone(), err))?;
                 if !names.insert(&**name) {
                     return Err((meta.clone(), CommandError::NameAlreadyExists(name.clone())));
                 }
