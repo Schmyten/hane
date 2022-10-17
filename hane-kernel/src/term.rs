@@ -19,6 +19,14 @@ pub enum TermVariant<M, B> {
     Product(B, Term<M, B>, Term<M, B>),
     Abstract(B, Term<M, B>, Term<M, B>),
     Bind(B, Term<M, B>, Term<M, B>, Term<M, B>),
+    Match(Term<M, B>, B, MatchArm<M, B>, Vec<MatchArm<M, B>>),
+}
+
+#[derive(Clone)]
+pub struct MatchArm<M, B> {
+    pub constructor: String,
+    pub params: Vec<B>,
+    pub body: Term<M, B>,
 }
 
 impl<M, B> PartialEq for Term<M, B> {
@@ -57,6 +65,19 @@ impl<M, B> Display for TermVariant<M, B> {
             TermVariant::Product(_, t1, t2) => write!(f, "forall[{}] ({})", t1, t2),
             TermVariant::Abstract(_, t1, t2) => write!(f, "fun[{}] ({})", t1, t2),
             TermVariant::Bind(_, t1, t2, t3) => write!(f, "let[{} : {}] ({})", t1, t2, t3),
+            TermVariant::Match(t, _, ret, arms) => {
+                write!(
+                    f,
+                    "match {t} in {} return {} with",
+                    ret.constructor, ret.body
+                )?;
+                let mut sep = "";
+                for arm in arms {
+                    write!(f, "{sep} {} => {}", arm.constructor, arm.body)?;
+                    sep = " |";
+                }
+                write!(f, " end")
+            }
         }
     }
 }
@@ -92,6 +113,7 @@ impl<M: Clone, B: Clone> TermVariant<M, B> {
                 x_val.push_inner(cut, amount),
                 t.push_inner(cut + 1, amount),
             ),
+            TermVariant::Match(_, _, _, _) => todo!(),
         }
     }
 }
@@ -137,6 +159,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 x_val.subst_inner(push, f),
                 t.subst_inner(push + 1, f),
             ),
+            TermVariant::Match(_, _, _, _) => todo!(),
         };
         Term {
             meta: self.meta.clone(),
@@ -179,6 +202,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 x_val.try_subst_inner(push, f)?,
                 t.try_subst_inner(push + 1, f)?,
             ),
+            TermVariant::Match(_, _, _, _) => todo!(),
         };
         Ok(Term {
             meta: self.meta.clone(),
@@ -260,6 +284,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                     *self = t.subst_single(0, val);
                     continue;
                 }
+                TermVariant::Match(_, _, _, _) => todo!(),
             }
             break;
         }
@@ -283,6 +308,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 body.eta();
             }
             TermVariant::Bind(_, _, _, _) => unreachable!(),
+            TermVariant::Match(_, _, _, _) => todo!(),
         }
 
         if let TermVariant::Abstract(_, _, body) = &*self.variant {
@@ -483,6 +509,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 let mut local = local.push(Entry::new(x.clone(), x_tp.clone()));
                 t_subst.type_check(global, &mut local)?
             }
+            TermVariant::Match(_, _, _, _) => todo!(),
         })
     }
 }

@@ -100,6 +100,28 @@ pub fn write_term<M>(
             }
             Ok(())
         }
+        TermVariant::Match(t, name, ret, arms) => {
+            write!(buf, "match ")?;
+            write_term(buf, t, names, 200)?;
+            let name = fresh(name, names);
+            write!(buf, " as {name} in {}", ret.constructor)?;
+            for x in &ret.params {
+                write!(buf, " {x}")?;
+            }
+            write!(buf, " return ")?;
+            write_term(buf, &ret.body, names, 200)?;
+            write!(buf, " with")?;
+            let mut sep = "";
+            for arm in arms {
+                write!(buf, "{sep} {}", arm.constructor)?;
+                sep = " |";
+                for x in &arm.params {
+                    write!(buf, " {x}")?;
+                }
+                write!(buf, " => {}", arm.body)?;
+            }
+            write!(buf, " end")
+        }
     }
 }
 

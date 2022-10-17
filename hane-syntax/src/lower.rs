@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{Binder, Command, CommandVariant, Expr, ExprVariant, Span, SpanError};
-use hane_kernel::entry::Binder as LoweredBinder;
+use hane_kernel::{entry::Binder as LoweredBinder, term::MatchArm};
 use hane_kernel::{
     Command as LoweredCommand, CommandVariant as LoweredCommandVariant, IndBody as LoweredIndBody,
     IndConstructor as LoweredIndConstructor,
@@ -240,6 +240,47 @@ impl Expr {
                 let x = names.pop().next().unwrap();
                 let t = t?;
                 TermVariant::Bind(x, x_tp, x_val, t)
+            }
+            ExprVariant::Match(t, name, pat, ret, arms) => {
+                let t = t.lower(global, names)?;
+                let mut as_names = names.push(name);
+                if !global.contains(&pat.constructor) {
+                    return Err(SpanError {
+                        span: self.span.clone(),
+                        err: LoweringError::UnknownVariable(pat.constructor.to_owned()),
+                    });
+                }
+                let mut ret_names = as_names.slot();
+                ret_names.extend(pat.params);
+                let ret = ret.lower(global, &mut ret_names)?;
+                let arms = arms
+                    .into_iter()
+                    .map(|(pat, body)| {
+                        if !global.contains(&pat.constructor) {
+                            return Err(SpanError {
+                                span: self.span.clone(),
+                                err: LoweringError::UnknownVariable(pat.constructor.to_owned()),
+                            });
+                        }
+                        let mut names = ret_names.slot();
+                        names.extend(pat.params);
+                        let body = body.lower(global, &mut names)?;
+                        let params = names.pop().collect();
+                        Ok(MatchArm {
+                            constructor: pat.constructor,
+                            params,
+                            body,
+                        })
+                    })
+                    .collect::<Result<_, SpanError<LoweringError>>>()?;
+                let params = ret_names.pop().collect();
+                let ret = MatchArm {
+                    constructor: pat.constructor,
+                    params,
+                    body: ret,
+                };
+                let name = as_names.pop().next().unwrap();
+                TermVariant::Match(t, name, ret, arms)
             }
         };
         Ok(Term {

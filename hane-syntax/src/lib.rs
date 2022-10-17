@@ -89,6 +89,12 @@ pub struct Binder {
 }
 
 #[derive(PartialEq, Eq)]
+pub struct Pattern {
+    constructor : String,
+    params : Vec<String>,
+}
+
+#[derive(PartialEq, Eq)]
 pub enum ExprVariant {
     Sort(Sort),
     Var(String),
@@ -96,6 +102,7 @@ pub enum ExprVariant {
     Product(Vec<Binder>, Expr),
     Abstract(Vec<Binder>, Expr),
     Bind(String, Expr, Expr, Expr),
+    Match(Expr, String, Pattern, Expr, Vec<(Pattern, Expr)>),
 }
 
 pub struct SpanError<E> {
