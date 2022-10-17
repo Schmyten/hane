@@ -21,9 +21,9 @@ pub enum TypeErrorVariant<M, B> {
 }
 
 impl<M, B: Clone> TypeError<M, B> {
-    pub fn new(lenv: &mut Stack<Entry<M, B>>, variant: TypeErrorVariant<M, B>) -> Self {
+    pub fn new(local: &mut Stack<Entry<M, B>>, variant: TypeErrorVariant<M, B>) -> Self {
         TypeError {
-            bindings: lenv.iter().rev().map(|entry| entry.x.clone()).collect(),
+            bindings: local.iter().rev().map(|entry| entry.x.clone()).collect(),
             variant,
         }
     }

@@ -125,17 +125,17 @@ impl<M: Clone, B: Clone> Global<M, B> {
     ) -> Result<(), (M, CommandError<M, B>)> {
         self.expect_fresh(&name)
             .map_err(|err| (meta.clone(), err))?;
-        let mut lenv = Stack::new();
+        let mut local = Stack::new();
         let sort = ttype
-            .type_check(self, &mut lenv)
+            .type_check(self, &mut local)
             .map_err(|(meta, err)| (meta, CommandError::TypeError(err)))?;
-        sort.expect_sort(self, &mut lenv)
+        sort.expect_sort(self, &mut local)
             .map_err(|err| (ttype.meta.clone(), CommandError::TypeError(err)))?;
         let value_type = value
-            .type_check(self, &mut lenv)
+            .type_check(self, &mut local)
             .map_err(|(meta, err)| (meta, CommandError::TypeError(err)))?;
         value_type
-            .expect_subtype(&ttype, self, &mut lenv)
+            .expect_subtype(&ttype, self, &mut local)
             .map_err(|err| (value.meta.clone(), CommandError::TypeError(err)))?;
         self.env
             .push((meta, GEntry::Definition(name, ttype, value)));
@@ -150,11 +150,11 @@ impl<M: Clone, B: Clone> Global<M, B> {
     ) -> Result<(), (M, CommandError<M, B>)> {
         self.expect_fresh(&name)
             .map_err(|err| (meta.clone(), err))?;
-        let mut lenv = Stack::new();
+        let mut local = Stack::new();
         let sort = ttype
-            .type_check(self, &mut lenv)
+            .type_check(self, &mut local)
             .map_err(|(meta, err)| (meta, CommandError::TypeError(err)))?;
-        sort.expect_sort(self, &mut lenv)
+        sort.expect_sort(self, &mut local)
             .map_err(|err| (ttype.meta.clone(), CommandError::TypeError(err)))?;
         self.env.push((meta, GEntry::Axiom(name, ttype)));
         Ok(())
@@ -185,19 +185,19 @@ impl<M: Clone, B: Clone> Global<M, B> {
 
         let mut ind_bodies = Vec::with_capacity(bodies.len());
         let mut constructors = Vec::with_capacity(bodies.len());
-        let mut lenv = Stack::new();
-        let mut lenv = lenv.slot();
+        let mut local = Stack::new();
+        let mut local = local.slot();
 
         // We start of by adding the parameters to the local environment
         for param in &params {
             let ttype = param
                 .ttype
-                .type_check(self, &mut lenv)
+                .type_check(self, &mut local)
                 .map_err(|(meta, err)| (meta, CommandError::TypeError(err)))?;
             ttype
-                .expect_sort(self, &mut lenv)
+                .expect_sort(self, &mut local)
                 .map_err(|err| (param.ttype.meta.clone(), CommandError::TypeError(err)))?;
-            lenv.push_onto(param.clone().into());
+            local.push_onto(param.clone().into());
         }
 
         // Next we typecheck the new types' sorts, ignoring all constructors
@@ -205,11 +205,11 @@ impl<M: Clone, B: Clone> Global<M, B> {
             constructors.push(cs);
 
             arity_type
-                .type_check(self, &mut lenv)
+                .type_check(self, &mut local)
                 .map_err(|(meta, err)| (meta, CommandError::TypeError(err)))?;
 
             let mut norm = arity_type.clone();
-            norm.normalize(self, &mut lenv);
+            norm.normalize(self, &mut local);
             let (arity, norm) = norm.strip_products();
 
             let sort = if let TermVariant::Sort(sort) = *norm.variant {
@@ -218,7 +218,7 @@ impl<M: Clone, B: Clone> Global<M, B> {
                 return Err((
                     arity_type.meta,
                     CommandError::TypeError(TypeError::new(
-                        &mut lenv,
+                        &mut local,
                         TypeErrorVariant::NotASort(norm),
                     )),
                 ));
@@ -258,14 +258,14 @@ impl<M: Clone, B: Clone> Global<M, B> {
                     .into_iter()
                     .map(|(name, arity_type)| {
                         let sort = arity_type
-                            .type_check(self, &mut lenv)
+                            .type_check(self, &mut local)
                             .map_err(|(meta, err)| (meta, CommandError::TypeError(err)))?;
-                        let _ = sort.expect_sort(self, &mut lenv).map_err(|err| {
+                        let _ = sort.expect_sort(self, &mut local).map_err(|err| {
                             (arity_type.meta.clone(), CommandError::TypeError(err))
                         })?;
 
                         let mut norm = arity_type.clone();
-                        norm.normalize(self, &mut lenv);
+                        norm.normalize(self, &mut local);
                         let (arity, ttype) = norm.strip_products();
                         let full_type = params.iter().cloned().rev().fold(
                             arity_type.clone(),
