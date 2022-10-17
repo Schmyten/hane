@@ -60,6 +60,7 @@ pub struct IndBody {
     pub constructors: Vec<IndConstructor>,
 }
 
+/// A single constructor of an inductive type
 pub struct IndConstructor {
     pub name: String,
     pub ttype: Expr,
@@ -71,8 +72,11 @@ pub struct LoweredCommand {
 }
 
 pub enum LoweredCommandVariant {
+    /// Defines a new constant in the global environment.
     Definition(String, Term<Span, String>, Term<Span, String>),
+    /// Creates a constant with the given type. This could make the logic inconsistent.
     Axiom(String, Term<Span, String>),
+    /// Defines a set of mutually inductive types.
     Inductive(Vec<LoweredBinder<Span, String>>, Vec<LoweredIndBody>),
 }
 

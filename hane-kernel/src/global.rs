@@ -160,6 +160,7 @@ impl<M: Clone, B: Clone> Global<M, B> {
         Ok(())
     }
 
+    /// Adds a family of mutally defined inductive types.
     pub fn inductive(
         &mut self,
         meta: M,

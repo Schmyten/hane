@@ -55,6 +55,7 @@ impl Display for EvalError {
 }
 
 impl LoweredCommand {
+    /// Evaluates the command, mutating the global environment acordingly.
     pub fn eval(self, global: &mut Global<Span, String>) -> Result<(), SpanError<EvalError>> {
         match self.variant {
             LoweredCommandVariant::Definition(name, ttype, value) => {
