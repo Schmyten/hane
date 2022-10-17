@@ -1,7 +1,7 @@
 use std::fmt::{self, Display, Formatter};
 
-use crate::{print::write_term, LoweredCommand, LoweredCommandVariant, Span, SpanError};
-use hane_kernel::{CommandError, Global, TypeErrorVariant};
+use crate::{print::write_term, Span};
+use hane_kernel::{CommandError, TypeErrorVariant};
 
 pub enum EvalError {
     CommandError(CommandError<Span, String>),
@@ -51,38 +51,5 @@ impl Display for EvalError {
                 }
             }
         }
-    }
-}
-
-impl LoweredCommand {
-    /// Evaluates the command, mutating the global environment acordingly.
-    pub fn eval(self, global: &mut Global<Span, String>) -> Result<(), SpanError<EvalError>> {
-        match self.variant {
-            LoweredCommandVariant::Definition(name, ttype, value) => {
-                global.definition(self.span, name, ttype, value)
-            }
-            LoweredCommandVariant::Axiom(name, ttype) => global.axiom(self.span, name, ttype),
-            LoweredCommandVariant::Inductive(params, bodies) => global.inductive(
-                self.span,
-                params,
-                bodies
-                    .into_iter()
-                    .map(|body| {
-                        (
-                            body.name,
-                            body.ttype,
-                            body.constructors
-                                .into_iter()
-                                .map(|constructor| (constructor.name, constructor.ttype))
-                                .collect(),
-                        )
-                    })
-                    .collect(),
-            ),
-        }
-        .map_err(|(span, err)| SpanError {
-            span,
-            err: EvalError::CommandError(err),
-        })
     }
 }

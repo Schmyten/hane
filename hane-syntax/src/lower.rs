@@ -3,11 +3,12 @@ use std::{
     fmt::{self, Display, Formatter},
 };
 
-use crate::{
-    Binder, Command, CommandVariant, Expr, ExprVariant, LoweredCommand, LoweredCommandVariant,
-    LoweredIndBody, LoweredIndConstructor, Span, SpanError,
-};
+use crate::{Binder, Command, CommandVariant, Expr, ExprVariant, Span, SpanError};
 use hane_kernel::entry::Binder as LoweredBinder;
+use hane_kernel::{
+    Command as LoweredCommand, CommandVariant as LoweredCommandVariant, IndBody as LoweredIndBody,
+    IndConstructor as LoweredIndConstructor,
+};
 use hane_kernel::{Sort, Stack, Term, TermVariant};
 
 pub enum LoweringError {
@@ -29,37 +30,11 @@ impl Display for LoweringError {
     }
 }
 
-impl Display for LoweredCommand {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match &self.variant {
-            LoweredCommandVariant::Definition(name, ttype, value) => {
-                write!(f, "Definition {name} : {ttype} := {value}.")
-            }
-            LoweredCommandVariant::Axiom(name, ttype) => write!(f, "Axiom {name} : {ttype}."),
-            LoweredCommandVariant::Inductive(params, bodies) => {
-                let mut sep = "Inductive";
-                for body in bodies {
-                    write!(f, "{sep} {}", body.name)?;
-                    sep = "\n    with";
-                    for param in params {
-                        write!(f, " ({})", param.ttype)?;
-                    }
-                    write!(f, " : {} :=", body.ttype)?;
-                    for constructor in &body.constructors {
-                        write!(f, "\n    | {} : {}", constructor.name, constructor.ttype)?;
-                    }
-                }
-                write!(f, ".")
-            }
-        }
-    }
-}
-
 impl Command {
     pub fn lower(
         self,
         global: &mut HashSet<String>,
-    ) -> Result<LoweredCommand, SpanError<LoweringError>> {
+    ) -> Result<LoweredCommand<Span, String>, SpanError<LoweringError>> {
         let mut names = Stack::new();
         let variant = match self.variant {
             CommandVariant::Definition(name, ttype, value) => {
@@ -178,7 +153,7 @@ impl Command {
             }
         };
         Ok(LoweredCommand {
-            span: self.span,
+            meta: self.span,
             variant,
         })
     }

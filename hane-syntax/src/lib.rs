@@ -5,9 +5,6 @@ pub mod print;
 
 use std::fmt::{self, Display, Write};
 
-use hane_kernel::entry::Binder as LoweredBinder;
-use hane_kernel::Term;
-
 #[derive(Clone, Copy)]
 pub struct Location {
     pub pos: usize,
@@ -64,31 +61,6 @@ pub struct IndBody {
 pub struct IndConstructor {
     pub name: String,
     pub ttype: Expr,
-}
-
-pub struct LoweredCommand {
-    pub span: Span,
-    pub variant: LoweredCommandVariant,
-}
-
-pub enum LoweredCommandVariant {
-    /// Defines a new constant in the global environment.
-    Definition(String, Term<Span, String>, Term<Span, String>),
-    /// Creates a constant with the given type. This could make the logic inconsistent.
-    Axiom(String, Term<Span, String>),
-    /// Defines a set of mutually inductive types.
-    Inductive(Vec<LoweredBinder<Span, String>>, Vec<LoweredIndBody>),
-}
-
-pub struct LoweredIndBody {
-    pub name: String,
-    pub ttype: Term<Span, String>,
-    pub constructors: Vec<LoweredIndConstructor>,
-}
-
-pub struct LoweredIndConstructor {
-    pub name: String,
-    pub ttype: Term<Span, String>,
 }
 
 #[derive(PartialEq, Eq)]
