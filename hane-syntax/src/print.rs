@@ -103,22 +103,39 @@ pub fn write_term<M>(
         TermVariant::Match(t, name, ret, arms) => {
             write!(buf, "match ")?;
             write_term(buf, t, names, 200)?;
-            let name = fresh(name, names);
+            let mut name = fresh(name, names);
             write!(buf, " as {name} in {}", ret.constructor)?;
-            for x in &ret.params {
-                write!(buf, " {x}")?;
+            {
+                let mut names = names.slot();
+                for x in &ret.params {
+                    let mut as_names = names.push(name);
+                    let x = fresh(x, &mut as_names);
+                    name = as_names.pop().next().unwrap();
+                    write!(buf, " {x}")?;
+                    names.push_onto(x);
+                }
+                write!(buf, " return ")?;
+                let mut names = names.push(name);
+                write_term(buf, term, &mut names, 200)?;
+                name = names.pop().next().unwrap();
             }
-            write!(buf, " return ")?;
-            write_term(buf, &ret.body, names, 200)?;
             write!(buf, " with")?;
             let mut sep = "";
             for arm in arms {
                 write!(buf, "{sep} {}", arm.constructor)?;
                 sep = " |";
+                let mut names = names.slot();
                 for x in &arm.params {
+                    let mut as_names = names.push(name);
+                    let x = fresh(x, &mut as_names);
+                    name = as_names.pop().next().unwrap();
                     write!(buf, " {x}")?;
+                    names.push_onto(x);
                 }
-                write!(buf, " => {}", arm.body)?;
+                write!(buf, " => ")?;
+                let mut names = names.push(name);
+                write_term(buf, term, &mut names, 200)?;
+                name = names.pop().next().unwrap();
             }
             write!(buf, " end")
         }
