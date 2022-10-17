@@ -222,7 +222,8 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 TermVariant::Var(n) => {
                     // δ reduction
                     if let Some(value) = &lenv.get(*n).unwrap().value {
-                        *self = value.push(*n);
+                        // To move the value into scope, it must first be pushed passed it self, then passed the other `n`
+                        *self = value.push(*n+1);
                         continue;
                     }
                 }
@@ -413,6 +414,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 variant: Box::new(TermVariant::Sort(sort.ttype())),
             },
             TermVariant::Var(n) => {
+                // To move the type into scope, it must first be pushed passed it self, then passed the other `n`
                 return lenv.get(*n).map(|e| e.ttype.push(*n + 1)).ok_or_else(|| {
                     (
                         self.meta.clone(),
