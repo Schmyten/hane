@@ -166,6 +166,7 @@ impl<M: Clone, B: Clone> Global<M, B> {
         params: Vec<Binder<M, B>>,
         bodies: Vec<(String, Term<M, B>, Vec<(String, Term<M, B>)>)>,
     ) -> Result<(), (M, CommandError<M, B>)> {
+        // Ensure all names are fresh
         let mut names = HashSet::new();
         for (name, _, constructors) in &bodies {
             self.expect_fresh(name).map_err(|err| (meta.clone(), err))?;
@@ -186,6 +187,7 @@ impl<M: Clone, B: Clone> Global<M, B> {
         let mut lenv = Stack::new();
         let mut lenv = lenv.slot();
 
+        // We start of by adding the parameters to the local environment
         for param in &params {
             let ttype = param
                 .ttype
@@ -197,6 +199,7 @@ impl<M: Clone, B: Clone> Global<M, B> {
             lenv.push_onto(param.clone().into());
         }
 
+        // Next we typecheck the new types' sorts, ignoring all constructors
         for (name, arity_type, cs) in bodies {
             constructors.push(cs);
 
@@ -239,6 +242,7 @@ impl<M: Clone, B: Clone> Global<M, B> {
             })
         }
 
+        // Then we temporarily put all the new types into the global environment, as they should be in scope for the types of the constructors
         self.env.extend(ind_bodies.iter().map(|body| {
             (
                 meta.clone(),
@@ -246,6 +250,7 @@ impl<M: Clone, B: Clone> Global<M, B> {
             )
         }));
 
+        // Finally we typecheck the constructors and add them to the bodies of each type
         for (body, constructors) in ind_bodies.iter_mut().zip(constructors) {
             body.constructors =
                 constructors
@@ -284,6 +289,7 @@ impl<M: Clone, B: Clone> Global<M, B> {
                     .collect::<Result<_, (M, CommandError<M, B>)>>()?;
         }
 
+        // With the constructors typechecked, we can now remove the new types, so that they can be properly instantiated as inductive types
         self.env.truncate(self.env.len() - ind_bodies.len());
 
         //Todo: Positivity of constructors
