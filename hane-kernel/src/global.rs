@@ -292,7 +292,7 @@ impl<M: Clone, B: Clone> Global<M, B> {
         // With the constructors typechecked, we can now remove the new types, so that they can be properly instantiated as inductive types
         self.env.truncate(self.env.len() - ind_bodies.len());
 
-        //Todo: Positivity of constructors
+        //TODO: [Positivity Condition](https://coq.inria.fr/distrib/current/refman/language/core/inductive.html#positivity-condition)
 
         self.env.push((meta, GEntry::Inductive(params, ind_bodies)));
         Ok(())
