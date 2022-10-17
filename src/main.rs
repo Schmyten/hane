@@ -1,5 +1,7 @@
 use hane_kernel::global::Global;
+use hane_syntax::eval::EvalError;
 use hane_syntax::parser::parse;
+use hane_syntax::SpanError;
 use std::collections::HashSet;
 use std::fs::read_to_string;
 
@@ -170,8 +172,12 @@ fn main() {
                     failed += 1;
                     continue;
                 }
-                Err(err) => {
-                    let err = err.print(path.to_string_lossy().as_ref(), &content);
+                Err((span, err)) => {
+                    let err = SpanError {
+                        span,
+                        err: EvalError::CommandError(err),
+                    }
+                    .print(path.to_string_lossy().as_ref(), &content);
                     if err != result_err {
                         eprintln!("{name}: Error does not match expected error");
                         eprintln!("expected:");
@@ -197,8 +203,12 @@ fn main() {
             continue;
         }
 
-        if let Err(err) = result {
-            let err = err.print(path.to_string_lossy().as_ref(), &content);
+        if let Err((span, err)) = result {
+            let err = SpanError {
+                span,
+                err: EvalError::CommandError(err),
+            }
+            .print(path.to_string_lossy().as_ref(), &content);
             eprintln!("{name}: Failed with error:");
             eprintln!("```\n{err}\n```");
             failed += 1;
