@@ -184,6 +184,7 @@ impl<M: Clone, B: Clone> Global<M, B> {
         let mut ind_bodies = Vec::with_capacity(bodies.len());
         let mut constructors = Vec::with_capacity(bodies.len());
         let mut lenv = Stack::new();
+        let mut lenv = lenv.slot();
 
         for param in &params {
             let ttype = param
@@ -193,7 +194,7 @@ impl<M: Clone, B: Clone> Global<M, B> {
             ttype
                 .expect_sort(self, &mut lenv)
                 .map_err(|err| (param.ttype.meta.clone(), CommandError::TypeError(err)))?;
-            lenv.push(param.clone().into());
+            lenv.push_onto(param.clone().into());
         }
 
         for (name, arity_type, cs) in bodies {
@@ -211,7 +212,7 @@ impl<M: Clone, B: Clone> Global<M, B> {
                 sort
             } else {
                 return Err((
-                    arity_type.meta.clone(),
+                    arity_type.meta,
                     CommandError::TypeError(TypeError::new(
                         &mut lenv,
                         TypeErrorVariant::NotASort(norm),
