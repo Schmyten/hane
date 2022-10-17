@@ -13,6 +13,13 @@ type Pair<'i> = pest::iterators::Pair<'i, Rule>;
 
 type ParseError = SpanError<pest::error::ErrorVariant<Rule>>;
 
+macro_rules! debug_assert_rule {
+    ($pairs:expr, $rule:ident) => {
+        let pair: Option<Pair> = $pairs.next();
+        debug_assert_eq!(pair.map(|pair| pair.as_rule()), Some(Rule::$rule))
+    };
+}
+
 impl From<pest::error::Error<Rule>> for ParseError {
     fn from(err: pest::error::Error<Rule>) -> Self {
         use crate::Location;
@@ -62,17 +69,15 @@ pub fn parse_command(pair: Pair) -> Command {
     let mut pairs = pair.into_inner();
     let variant = match rule {
         Rule::command_definition => {
-            let kw = pairs.next();
-            debug_assert_eq!(kw.map(|s| s.as_str()), Some("Definition"));
-            let name = pairs.next().unwrap().as_str().to_owned();
+            debug_assert_rule!(pairs, keyword_definition);
+            let name = parse_ident(pairs.next().unwrap());
             let ttype = parse_expr(pairs.next().unwrap());
             let value = parse_expr(pairs.next().unwrap());
             CommandVariant::Definition(name, ttype, value)
         }
         Rule::command_axiom => {
-            let kw = pairs.next();
-            debug_assert_eq!(kw.map(|s| s.as_str()), Some("Axiom"));
-            let name = pairs.next().unwrap().as_str().to_owned();
+            debug_assert_rule!(pairs, keyword_axiom);
+            let name = parse_ident(pairs.next().unwrap());
             let ttype = parse_expr(pairs.next().unwrap());
             CommandVariant::Axiom(name, ttype)
         }
@@ -88,7 +93,7 @@ pub fn parse_command(pair: Pair) -> Command {
 fn parse_ind_body(pair: Pair) -> IndBody {
     debug_assert_eq!(pair.as_rule(), Rule::inductive_body);
     let mut pairs = pair.into_inner();
-    let name = pairs.next().unwrap().as_str().to_owned();
+    let name = parse_ident(pairs.next().unwrap());
     let params = parse_binders(pairs.next().unwrap());
     let ttype = parse_expr(pairs.next().unwrap());
     let constructors = pairs
@@ -98,7 +103,7 @@ fn parse_ind_body(pair: Pair) -> IndBody {
         .map(|pair| {
             debug_assert_eq!(pair.as_rule(), Rule::inductive_constructor);
             let mut pairs = pair.into_inner();
-            let name = pairs.next().unwrap().as_str().to_owned();
+            let name = parse_ident(pairs.next().unwrap());
             let ttype = parse_expr(pairs.next().unwrap());
             IndConstructor { name, ttype }
         })
@@ -136,29 +141,25 @@ fn parse_expr_inner(pair: Pair) -> (Span, Expr) {
     let variant = match rule {
         Rule::expr_paren => return (span, parse_expr(pairs.next().unwrap())),
         Rule::sort => ExprVariant::Sort(parse_sort(pairs.next().unwrap())),
-        Rule::expr_var => ExprVariant::Var(pairs.next().unwrap().as_str().to_owned()),
+        Rule::expr_var => ExprVariant::Var(parse_ident(pairs.next().unwrap())),
         Rule::expr_product => {
-            let kw = pairs.next(); // Skip forall keyword
-            debug_assert_eq!(kw.map(|s| s.as_str()), Some("forall"));
+            debug_assert_rule!(pairs, keyword_forall); // Skip forall keyword
             let binders = parse_binders(pairs.next().unwrap()); // parse binders
             let t = parse_expr(pairs.next().unwrap()); // parse body
             ExprVariant::Product(binders, t)
         }
         Rule::expr_abstract => {
-            let kw = pairs.next(); // Skip fun keyword
-            debug_assert_eq!(kw.map(|s| s.as_str()), Some("fun"));
+            debug_assert_rule!(pairs, keyword_fun); // Skip fun keyword
             let binders = parse_binders(pairs.next().unwrap()); // parse arguments
             let t = parse_expr(pairs.next().unwrap()); // parse body
             ExprVariant::Abstract(binders, t)
         }
         Rule::expr_let_bind => {
-            let kw = pairs.next(); // Skip let keyword
-            debug_assert_eq!(kw.map(|s| s.as_str()), Some("let"));
-            let x = pairs.next().unwrap().as_str().to_owned(); // parse var name
+            debug_assert_rule!(pairs, keyword_let); // Skip let keyword
+            let x = parse_ident(pairs.next().unwrap()); // parse var name
             let x_tp = parse_expr(pairs.next().unwrap()); // parse type
             let x_val = parse_expr(pairs.next().unwrap()); // parse value
-            let kw = pairs.next(); // Skip in keyword
-            debug_assert_eq!(kw.map(|s| s.as_str()), Some("let"));
+            debug_assert_rule!(pairs, keyword_in); // Skip in keyword
             let t = parse_expr(pairs.next().unwrap()); // parse rest of body
             ExprVariant::Bind(x, x_tp, x_val, t)
         }
@@ -171,6 +172,11 @@ fn parse_expr_inner(pair: Pair) -> (Span, Expr) {
             variant: Box::new(variant),
         },
     )
+}
+
+fn parse_ident(pair: Pair) -> String {
+    debug_assert_eq!(pair.as_rule(), Rule::ident);
+    pair.as_str().to_owned()
 }
 
 fn parse_sort(pair: Pair) -> Sort {
@@ -200,7 +206,7 @@ fn parse_binders(pair: Pair) -> Vec<Binder> {
             debug_assert_eq!(p.as_rule(), Rule::binder_base);
             let mut pairs = p.into_inner();
             Binder {
-                name: pairs.next().unwrap().as_str().to_owned(),
+                name: parse_ident(pairs.next().unwrap()),
                 ttype: parse_expr(pairs.next().unwrap()),
             }
         })
