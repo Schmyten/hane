@@ -349,6 +349,8 @@ impl<M: Clone, B: Clone> Term<M, B> {
         }
     }
 
+    /// Seperates terms of the form `forall (x1 : T1) .. (xn : Tn), t` into `([(x1 : T1), .. , (xn : Tn)], t)`.
+    /// If the input is not a product, it is returned unchanged.
     pub fn strip_products(mut self) -> (Vec<Binder<M, B>>, Self) {
         let mut arity = Vec::new();
         while let TermVariant::Product(x, ttype, body) = *self.variant {
@@ -358,6 +360,8 @@ impl<M: Clone, B: Clone> Term<M, B> {
         (arity, self)
     }
 
+    /// Seperates terms of the form `f v1 .. vn` into `(f, [v1, .. , vn])`.
+    /// If the input is not an application, it is returned unchanged.
     pub fn strip_args(mut self) -> (Self, Vec<Self>) {
         let mut args = Vec::new();
         while let TermVariant::App(fun, arg) = *self.variant {
