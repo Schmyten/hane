@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::fmt::{self, Display, Formatter};
 
-use crate::entry::{Entry, EntryRef};
+use crate::entry::{Binder, Entry, EntryRef};
 use crate::{Global, Sort, Stack, TypeError, TypeErrorVariant};
 
 #[derive(Clone)]
@@ -222,7 +222,8 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 TermVariant::Var(n) => {
                     // δ reduction
                     if let Some(value) = &lenv.get(*n).unwrap().value {
-                        *self = value.push(*n);
+                        // To move the value into scope, it must first be pushed passed it self, then passed the other `n`
+                        *self = value.push(*n+1);
                         continue;
                     }
                 }
@@ -349,6 +350,29 @@ impl<M: Clone, B: Clone> Term<M, B> {
         }
     }
 
+    /// Seperates terms of the form `forall (x1 : T1) .. (xn : Tn), t` into `([(x1 : T1), .. , (xn : Tn)], t)`.
+    /// If the input is not a product, it is returned unchanged.
+    pub fn strip_products(mut self) -> (Vec<Binder<M, B>>, Self) {
+        let mut arity = Vec::new();
+        while let TermVariant::Product(x, ttype, body) = *self.variant {
+            arity.push(Binder { x, ttype });
+            self = body
+        }
+        (arity, self)
+    }
+
+    /// Seperates terms of the form `f v1 .. vn` into `(f, [v1, .. , vn])`.
+    /// If the input is not an application, it is returned unchanged.
+    pub fn strip_args(mut self) -> (Self, Vec<Self>) {
+        let mut args = Vec::new();
+        while let TermVariant::App(fun, arg) = *self.variant {
+            args.push(arg);
+            self = fun
+        }
+        args.reverse();
+        (self, args)
+    }
+
     pub fn expect_sort(
         &self,
         global: &Global<M, B>,
@@ -375,7 +399,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
         if let TermVariant::Product(_, input_type, output_type) = *self.variant {
             Ok((input_type, output_type))
         } else {
-            Err(TypeError::new(lenv, TypeErrorVariant::NotASort(self)))
+            Err(TypeError::new(lenv, TypeErrorVariant::NotAProduct(self)))
         }
     }
 
@@ -390,7 +414,8 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 variant: Box::new(TermVariant::Sort(sort.ttype())),
             },
             TermVariant::Var(n) => {
-                return lenv.get(*n).map(|e| e.ttype.push(*n)).ok_or_else(|| {
+                // To move the type into scope, it must first be pushed passed it self, then passed the other `n`
+                return lenv.get(*n).map(|e| e.ttype.push(*n + 1)).ok_or_else(|| {
                     (
                         self.meta.clone(),
                         TypeError::new(lenv, TypeErrorVariant::DebruijnOutOfScope(*n)),

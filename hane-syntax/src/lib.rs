@@ -5,6 +5,7 @@ pub mod print;
 
 use std::fmt::{self, Display, Write};
 
+use hane_kernel::entry::Binder as LoweredBinder;
 use hane_kernel::Term;
 
 #[derive(Clone, Copy)]
@@ -48,6 +49,21 @@ pub struct Command {
 pub enum CommandVariant {
     Definition(String, Expr, Expr),
     Axiom(String, Expr),
+    Inductive(Vec<IndBody>),
+}
+
+/// A single type in a mutually defined inductive type set
+pub struct IndBody {
+    pub name: String,
+    pub params: Vec<Binder>,
+    pub ttype: Expr,
+    pub constructors: Vec<IndConstructor>,
+}
+
+/// A single constructor of an inductive type
+pub struct IndConstructor {
+    pub name: String,
+    pub ttype: Expr,
 }
 
 pub struct LoweredCommand {
@@ -56,10 +72,26 @@ pub struct LoweredCommand {
 }
 
 pub enum LoweredCommandVariant {
+    /// Defines a new constant in the global environment.
     Definition(String, Term<Span, String>, Term<Span, String>),
+    /// Creates a constant with the given type. This could make the logic inconsistent.
     Axiom(String, Term<Span, String>),
+    /// Defines a set of mutually inductive types.
+    Inductive(Vec<LoweredBinder<Span, String>>, Vec<LoweredIndBody>),
 }
 
+pub struct LoweredIndBody {
+    pub name: String,
+    pub ttype: Term<Span, String>,
+    pub constructors: Vec<LoweredIndConstructor>,
+}
+
+pub struct LoweredIndConstructor {
+    pub name: String,
+    pub ttype: Term<Span, String>,
+}
+
+#[derive(PartialEq, Eq)]
 pub enum Sort {
     Prop,
     Set,
@@ -71,11 +103,20 @@ pub struct Expr {
     pub variant: Box<ExprVariant>,
 }
 
+impl Eq for Expr {}
+impl PartialEq for Expr {
+    fn eq(&self, other: &Self) -> bool {
+        self.variant == other.variant
+    }
+}
+
+#[derive(PartialEq, Eq)]
 pub struct Binder {
     pub name: String,
     pub ttype: Expr,
 }
 
+#[derive(PartialEq, Eq)]
 pub enum ExprVariant {
     Sort(Sort),
     Var(String),

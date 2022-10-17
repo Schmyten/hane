@@ -132,3 +132,9 @@ impl<'a, T> StackSlot<'a, T> {
         buf.drain(slot..).rev()
     }
 }
+
+impl<T> Extend<T> for Stack<T> {
+    fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
+        self.0.extend(iter)
+    }
+}

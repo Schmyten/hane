@@ -1,0 +1,11 @@
+Inductive nat : Set :=
+    | O : nat
+    | S : forall[nat] (nat).
+Definition zero : nat := O.
+Definition one : nat := (S) (O).
+Definition two : nat := (S) ((S) (O)).
+Inductive even : forall[nat] (Prop) :=
+    | even_O : (even) (O)
+    | even_S : forall[nat] (forall[(odd) ('0)] ((even) ((S) ('1))))
+    with odd : forall[nat] (Prop) :=
+    | odd_S : forall[nat] (forall[(even) ('0)] ((odd) ((S) ('1)))).

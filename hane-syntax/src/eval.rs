@@ -55,20 +55,34 @@ impl Display for EvalError {
 }
 
 impl LoweredCommand {
+    /// Evaluates the command, mutating the global environment acordingly.
     pub fn eval(self, global: &mut Global<Span, String>) -> Result<(), SpanError<EvalError>> {
         match self.variant {
-            LoweredCommandVariant::Definition(name, ttype, value) => global
-                .definition(self.span, name, ttype, value)
-                .map_err(|(span, err)| SpanError {
-                    span,
-                    err: EvalError::CommandError(err),
-                }),
-            LoweredCommandVariant::Axiom(name, ttype) => global
-                .axiom(self.span, name, ttype)
-                .map_err(|(span, err)| SpanError {
-                    span,
-                    err: EvalError::CommandError(err),
-                }),
+            LoweredCommandVariant::Definition(name, ttype, value) => {
+                global.definition(self.span, name, ttype, value)
+            }
+            LoweredCommandVariant::Axiom(name, ttype) => global.axiom(self.span, name, ttype),
+            LoweredCommandVariant::Inductive(params, bodies) => global.inductive(
+                self.span,
+                params,
+                bodies
+                    .into_iter()
+                    .map(|body| {
+                        (
+                            body.name,
+                            body.ttype,
+                            body.constructors
+                                .into_iter()
+                                .map(|constructor| (constructor.name, constructor.ttype))
+                                .collect(),
+                        )
+                    })
+                    .collect(),
+            ),
         }
+        .map_err(|(span, err)| SpanError {
+            span,
+            err: EvalError::CommandError(err),
+        })
     }
 }

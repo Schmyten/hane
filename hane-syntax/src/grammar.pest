@@ -1,9 +1,14 @@
 commands = _{ SOI ~ command* ~ EOI }
-command = _{ command_definition | command_axiom }
+command = _{ command_definition | command_axiom | command_inductive }
 command_definition = {
     keyword_definition ~ ident ~ ":" ~ expr ~ ":=" ~ expr ~ "."
 }
 command_axiom = { keyword_axiom ~ ident ~ ":" ~ expr ~ "." }
+command_inductive = { keyword_inductive ~ inductive_body ~ (keyword_with ~ inductive_body)* ~ "." }
+
+inductive_body = { ident ~ binders_opt ~ ":" ~ expr ~ ":=" ~ inductive_constructors }
+inductive_constructors = { inductive_constructor? ~ ("|" ~ inductive_constructor)* }
+inductive_constructor = { ident ~ ":" ~ expr }
 
 expr = { expr_inner+ }
 expr_inner = _{
@@ -11,16 +16,16 @@ expr_inner = _{
 }
 expr_paren = { "(" ~ expr ~ ")" }
 expr_var = { ident }
-expr_product = { keyword_forall ~ expr_bind ~ "," ~ expr }
-expr_abstract = { keyword_fun ~ expr_bind ~ "=>" ~ expr }
+expr_product = { keyword_forall ~ binders ~ "," ~ expr }
+expr_abstract = { keyword_fun ~ binders ~ "=>" ~ expr }
 expr_let_bind = {
     keyword_let ~ ident ~ ":" ~ expr ~ ":=" ~ expr ~ keyword_in ~ expr
 }
-expr_bind = {
-    paren_bind+ | base_bind
-}
-paren_bind = _{ "(" ~ base_bind ~ ")" }
-base_bind = { ident ~ ":" ~ expr}
+
+binders_opt = { binder_base | binder_paren* }
+binders = { binder_base | binder_paren+ }
+binder_paren = _{ "(" ~ binder_base ~ ")" }
+binder_base = { ident ~ ":" ~ expr}
 
 
 sort = { sort_prop | sort_set | sort_type }
@@ -31,6 +36,8 @@ sort_type = { keyword_type ~ "{" ~ number ~ "}" }
 keyword = _{
     keyword_definition
    | keyword_axiom
+   | keyword_inductive
+   | keyword_with
    | keyword_prop
    | keyword_set
    | keyword_type
@@ -41,6 +48,8 @@ keyword = _{
 }
 keyword_definition = @{ "Definition" ~ !(ASCII_ALPHANUMERIC | "_") }
 keyword_axiom = @{ "Axiom" ~ !(ASCII_ALPHANUMERIC | "_") }
+keyword_inductive = @{ "Inductive" ~ !(ASCII_ALPHANUMERIC | "_") }
+keyword_with = @{ "with" ~ !(ASCII_ALPHANUMERIC | "_") }
 keyword_prop = @{ "Prop" ~ !(ASCII_ALPHANUMERIC | "_") }
 keyword_set = @{ "Set" ~ !(ASCII_ALPHANUMERIC | "_") }
 keyword_type = @{ "Type" ~ !(ASCII_ALPHANUMERIC | "_") }
