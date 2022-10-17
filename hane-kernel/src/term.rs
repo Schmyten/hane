@@ -394,7 +394,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
         if let TermVariant::Product(_, input_type, output_type) = *self.variant {
             Ok((input_type, output_type))
         } else {
-            Err(TypeError::new(lenv, TypeErrorVariant::NotASort(self)))
+            Err(TypeError::new(lenv, TypeErrorVariant::NotAProduct(self)))
         }
     }
 
