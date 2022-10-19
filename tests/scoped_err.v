@@ -1,0 +1,1 @@
+Definition err : Prop := forall (T : Type{0}) (P : forall T : Prop, T), P T.

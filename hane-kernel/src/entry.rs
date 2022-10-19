@@ -6,6 +6,7 @@ pub struct Binder<M, B> {
     pub ttype: Term<M, B>,
 }
 
+#[derive(Clone)]
 pub struct Entry<M, B> {
     pub x: B,
     pub value: Option<Term<M, B>>,

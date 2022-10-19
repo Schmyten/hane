@@ -175,7 +175,7 @@ fn main() {
                 Err((span, err)) => {
                     let err = SpanError {
                         span,
-                        err: EvalError::CommandError(err),
+                        err: EvalError(err),
                     }
                     .print(path.to_string_lossy().as_ref(), &content);
                     if err != result_err {
@@ -206,7 +206,7 @@ fn main() {
         if let Err((span, err)) = result {
             let err = SpanError {
                 span,
-                err: EvalError::CommandError(err),
+                err: EvalError(err),
             }
             .print(path.to_string_lossy().as_ref(), &content);
             eprintln!("{name}: Failed with error:");

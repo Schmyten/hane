@@ -1,0 +1,11 @@
+ --> tests/scoped_err.v:1:73
+  |
+1 | Definition err : Prop := forall (T : Type{0}) (P : forall T : Prop, T), P T.
+  |                                                                         ^^^
+  |
+  = Incompatible Types
+T: Type{0}
+P: forall T0 : Prop, T0
+
+Expected: Prop
+Actual: Type{0}

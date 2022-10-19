@@ -1,23 +1,46 @@
 use std::fmt::{self, Display, Formatter};
 
-use crate::{print::write_term, Span};
-use hane_kernel::{CommandError, TypeErrorVariant};
+use crate::{
+    print::{write_local, write_term},
+    Span,
+};
+use hane_kernel::{entry::Entry, CommandError, Stack, TypeError, TypeErrorVariant};
 
-pub enum EvalError {
-    CommandError(CommandError<Span, String>),
+pub struct EvalError(pub CommandError<Span, String>);
+
+fn write_cause(
+    err: &TypeError<Span, String>,
+    local: &Stack<Entry<Span, String>>,
+    f: &mut Formatter,
+) -> fmt::Result {
+    match &err.variant {
+        TypeErrorVariant::NotSubtypeType(_, _) => write!(f, "Invalid Subtype"),
+        TypeErrorVariant::IncompatibleTypes(_, _) => write!(f, "Incompatible Types"),
+        TypeErrorVariant::NotAProduct(_) => write!(f, "Expected a product"),
+        TypeErrorVariant::NotASort(_) => write!(f, "Expected a sort"),
+        TypeErrorVariant::DebruijnOutOfScope(n) => write!(
+            f,
+            "Debruijn index {n} out of scope. The local environment only contains {} names.",
+            local.len()
+        ),
+        TypeErrorVariant::UndefinedConst(name) => write!(f, "Unknown constant {name}"),
+    }
 }
 
 impl Display for EvalError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            EvalError::CommandError(CommandError::NameAlreadyExists(name)) => {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match &self.0 {
+            CommandError::NameAlreadyExists(name) => {
                 write!(f, "The name `{name}` has already been defined")
             }
-            EvalError::CommandError(CommandError::TypeError(err)) => {
-                let mut names = err.bindings.clone();
+            CommandError::TypeError(err) => {
+                write_cause(err, &err.local, f)?;
+                writeln!(f)?;
+                let mut names = Stack::new();
+                let mut names = write_local(f, &err.local, &mut names)?;
+                writeln!(f)?;
                 match &err.variant {
                     TypeErrorVariant::NotSubtypeType(expected, actual) => {
-                        writeln!(f, "Invalid Subtype")?;
                         write!(f, "Expected: ")?;
                         write_term(f, expected, &mut names, 200)?;
                         writeln!(f)?;
@@ -25,7 +48,6 @@ impl Display for EvalError {
                         write_term(f, actual, &mut names, 200)
                     }
                     TypeErrorVariant::IncompatibleTypes(expected, actual) => {
-                        writeln!(f, "Incompatible Types")?;
                         write!(f, "Expected: ")?;
                         write_term(f, expected, &mut names, 200)?;
                         writeln!(f)?;
@@ -33,21 +55,15 @@ impl Display for EvalError {
                         write_term(f, actual, &mut names, 200)
                     }
                     TypeErrorVariant::NotAProduct(ttype) => {
-                        writeln!(f, "Expected a product")?;
                         write!(f, "Found: ")?;
                         write_term(f, ttype, &mut names, 200)
                     }
                     TypeErrorVariant::NotASort(ttype) => {
-                        writeln!(f, "Expected a sort")?;
                         write!(f, "Found: ")?;
                         write_term(f, ttype, &mut names, 200)
                     }
-                    TypeErrorVariant::DebruijnOutOfScope(n) => write!(
-                        f,
-                        "Found debruijn index {n}, but there are only {} names in scope",
-                        names.len()
-                    ),
-                    TypeErrorVariant::UndefinedConst(name) => write!(f, "Unknown constant {name}"),
+                    TypeErrorVariant::DebruijnOutOfScope(_) => Ok(()),
+                    TypeErrorVariant::UndefinedConst(_) => Ok(()),
                 }
             }
         }

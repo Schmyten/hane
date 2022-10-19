@@ -1,6 +1,6 @@
 use std::fmt::{self, Write};
 
-use hane_kernel::{term::TermVariant, Stack};
+use hane_kernel::{entry::Entry, stack::StackSlot, term::TermVariant, Stack};
 
 type Term<M> = hane_kernel::term::Term<M, String>;
 
@@ -107,4 +107,24 @@ pub fn print_term<M>(term: &Term<M>, names: &mut Stack<String>, level: usize) ->
     let mut buf = String::new();
     write_term(&mut buf, term, names, level).unwrap();
     buf
+}
+
+pub fn write_local<'a, M>(
+    buf: &mut impl Write,
+    local: &Stack<Entry<M, String>>,
+    names: &'a mut Stack<String>,
+) -> Result<StackSlot<'a, String>, fmt::Error> {
+    let mut names = names.slot();
+    for entry in local.iter().rev() {
+        let x = fresh(&entry.x, &names);
+        write!(buf, "{x}: ")?;
+        write_term(buf, &entry.ttype, &mut names, 200)?;
+        if let Some(value) = &entry.value {
+            write!(buf, " := ")?;
+            write_term(buf, value, &mut names, 200)?;
+        }
+        writeln!(buf)?;
+        names.push_onto(x);
+    }
+    Ok(names)
 }

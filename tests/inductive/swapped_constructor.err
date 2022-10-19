@@ -1,0 +1,9 @@
+ --> tests/inductive/swapped_constructor.v:3:29
+  |
+3 | Definition false : False := I.
+  |                             ^
+  |
+  = Incompatible Types
+
+Expected: False
+Actual: True

@@ -1,0 +1,1 @@
+Definition err : Prop := forall[Type{0}] (forall[forall[Prop] ('0)] (('0) ('1))).

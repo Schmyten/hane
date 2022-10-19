@@ -7,7 +7,7 @@ pub enum CommandError<M, B> {
 
 pub struct TypeError<M, B> {
     /// the local binding context of the terms in the error
-    pub bindings: Stack<B>,
+    pub local: Stack<Entry<M, B>>,
     pub variant: TypeErrorVariant<M, B>,
 }
 
@@ -20,10 +20,10 @@ pub enum TypeErrorVariant<M, B> {
     UndefinedConst(String),
 }
 
-impl<M, B: Clone> TypeError<M, B> {
-    pub fn new(local: &mut Stack<Entry<M, B>>, variant: TypeErrorVariant<M, B>) -> Self {
+impl<M: Clone, B: Clone> TypeError<M, B> {
+    pub fn new(local: &Stack<Entry<M, B>>, variant: TypeErrorVariant<M, B>) -> Self {
         TypeError {
-            bindings: local.iter().rev().map(|entry| entry.x.clone()).collect(),
+            local: local.clone(),
             variant,
         }
     }

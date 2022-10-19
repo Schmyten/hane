@@ -4,5 +4,6 @@
   |                           ^^^^
   |
   = Incompatible Types
+
 Expected: Prop
 Actual: Type{0}
