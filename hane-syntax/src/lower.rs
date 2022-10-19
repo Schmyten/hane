@@ -276,12 +276,7 @@ impl Expr {
                         }
                         let mut names = names.slot();
                         names.extend(pat.params);
-                        let body = {
-                            let mut names = names.push(std::mem::take(&mut name));
-                            let body = body.lower(global, &mut names)?;
-                            name = names.pop().next().unwrap();
-                            body
-                        };
+                        let body = body.lower(global, &mut names)?;
                         let params = names.pop().collect();
                         Ok(MatchArm {
                             constructor: pat.constructor,

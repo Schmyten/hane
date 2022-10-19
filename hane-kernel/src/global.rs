@@ -9,31 +9,39 @@ pub struct Global<M, B> {
     env: Vec<(M, GEntry<M, B>)>,
 }
 
+pub(crate) enum GEntryRef<'a, M, B> {
+    Definition(&'a str, &'a Term<M, B>, &'a Term<M, B>),
+    Axiom(&'a str, &'a Term<M, B>),
+    Inductive(usize, &'a [Binder<M, B>], &'a [GIndBody<M, B>]),
+    InductiveConstructor(usize, usize, &'a [Binder<M, B>], &'a [GIndBody<M, B>]),
+}
+
 enum GEntry<M, B> {
     Definition(String, Term<M, B>, Term<M, B>),
     Axiom(String, Term<M, B>),
     Inductive(Vec<Binder<M, B>>, Vec<GIndBody<M, B>>),
 }
 
-struct GIndBody<M, B> {
-    name: String,
-    arity: Vec<Binder<M, B>>,
-    sort: Sort,
+pub(crate) struct GIndBody<M, B> {
+    pub(crate) name: String,
+    pub(crate) arity: Vec<Binder<M, B>>,
+    pub(crate) sort: Sort,
     /// Shorthand for `∀ arity.., sort`
-    arity_type: Term<M, B>,
+    pub(crate) arity_type: Term<M, B>,
     /// Shorthand for `∀ param.. arity.., sort`
-    full_type: Term<M, B>,
-    constructors: Vec<GIndConstructor<M, B>>,
+    pub(crate) full_type: Term<M, B>,
+    pub(crate) constructors: Vec<GIndConstructor<M, B>>,
 }
 
-struct GIndConstructor<M, B> {
-    name: String,
-    arity: Vec<Binder<M, B>>,
-    ttype: Term<M, B>,
+pub(crate) struct GIndConstructor<M, B> {
+    pub(crate) name: String,
+    pub(crate) arity: Vec<Binder<M, B>>,
+    pub(crate) args: Vec<Term<M, B>>,
+    pub(crate) ttype: Term<M, B>,
     /// Shorthand for `∀ arity.., ttype`
-    arity_type: Term<M, B>,
+    pub(crate) arity_type: Term<M, B>,
     /// Shorthand for `∀ param.. arity.., ttype`
-    full_type: Term<M, B>,
+    pub(crate) full_type: Term<M, B>,
 }
 
 impl<M, B> Display for Global<M, B> {
@@ -113,6 +121,28 @@ impl<M: Clone, B: Clone> Global<M, B> {
                     }
                 })
                 .map(|ttype| EntryRef::new(ttype)),
+        })
+    }
+
+    pub(crate) fn get_entry(&self, name: &str) -> Option<GEntryRef<M, B>> {
+        self.env.iter().find_map(|(_, entry)| match entry {
+            GEntry::Definition(x, ttype, val) => {
+                (x == name).then_some(GEntryRef::Definition(x, ttype, val))
+            }
+            GEntry::Axiom(x, ttype) => (x == name).then_some(GEntryRef::Axiom(x, ttype)),
+            GEntry::Inductive(params, bodies) => bodies.iter().enumerate().find_map(|(i, body)| {
+                if body.name == name {
+                    Some(GEntryRef::Inductive(i, params, bodies))
+                } else {
+                    body.constructors
+                        .iter()
+                        .enumerate()
+                        .find_map(|(j, constructor)| {
+                            (constructor.name == name)
+                                .then_some(GEntryRef::InductiveConstructor(i, j, params, bodies))
+                        })
+                }
+            }),
         })
     }
 }
@@ -318,6 +348,14 @@ impl<M: Clone, B: Clone> Command<M, B> {
                             let mut norm = constructor.ttype.clone();
                             norm.normalize(global, &mut local);
                             let (arity, ttype) = norm.strip_products();
+                            let (hd, args) = ttype.clone().strip_args();
+                            if let TermVariant::Const(i) = *hd.variant {
+                                if i != body.name {
+                                    todo!()
+                                }
+                            } else {
+                                todo!()
+                            }
                             let full_type = params.iter().cloned().rev().fold(
                                 constructor.ttype.clone(),
                                 |body, binder| Term {
@@ -333,6 +371,7 @@ impl<M: Clone, B: Clone> Command<M, B> {
                             Ok(GIndConstructor {
                                 name: constructor.name,
                                 arity,
+                                args,
                                 ttype,
                                 arity_type: constructor.ttype,
                                 full_type,

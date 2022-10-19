@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 use std::fmt::{self, Display, Formatter};
 
 use crate::entry::{Binder, Entry, EntryRef};
+use crate::global::GEntryRef;
 use crate::{Global, Sort, Stack, TypeError, TypeErrorVariant};
 
 #[derive(Clone)]
@@ -237,6 +238,25 @@ impl<M: Clone, B: Clone> Term<M, B> {
             }),
         })
         .ok()
+    }
+
+    pub fn subst_many(&self, n: usize, vals: &[Self]) -> Self {
+        self.subst(|meta, x, push| {
+            if x < n + push {
+                Term {
+                    meta: meta.clone(),
+                    variant: Box::new(TermVariant::Var(x)),
+                }
+            } else if x < n + push + vals.len() {
+                let i = n + push + vals.len() - x;
+                vals[i].push(push + vals.len() - i)
+            } else {
+                Term {
+                    meta: meta.clone(),
+                    variant: Box::new(TermVariant::Var(x - vals.len())),
+                }
+            }
+        })
     }
 
     pub fn normalize(&mut self, global: &Global<M, B>, local: &mut Stack<Entry<M, B>>) {
@@ -509,7 +529,116 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 let mut local = local.push(Entry::new(x.clone(), x_tp.clone()));
                 t_subst.type_check(global, &mut local)?
             }
-            TermVariant::Match(_, _, _, _) => todo!(),
+            TermVariant::Match(t, name, ret, arms) => {
+                let (i, params, bodies) = match global.get_entry(&ret.constructor) {
+                    Some(GEntryRef::Inductive(i, params, bodies)) => (i, params, bodies),
+                    Some(_) => todo!(),
+                    None => todo!(),
+                };
+                let body = &bodies[i];
+                // Insure the parameter count on the return pattern is correct
+                if ret.params.len() != params.len() + body.arity.len() {
+                    todo!()
+                }
+                let mut t_type = t.type_check(global, local)?;
+                t_type.normalize(global, local);
+                let (hd, mut args) = t_type.strip_args();
+                if let TermVariant::Const(i) = *hd.variant {
+                    if i != ret.constructor {
+                        todo!()
+                    }
+                } else {
+                    todo!()
+                };
+                let arity_args = args.drain(params.len()..).collect::<Vec<_>>();
+
+                {
+                    let mut local = local.slot();
+                    local.extend(ret.params.iter().zip(params).zip(&args).map(
+                        |((x, param), value)| {
+                            Entry::with_value(x.clone(), value.clone(), param.ttype.clone())
+                        },
+                    ));
+                    local.extend(
+                        ret.params[params.len()..]
+                            .iter()
+                            .zip(&body.arity)
+                            .map(|(x, param)| Entry::new(x.clone(), param.ttype.clone())),
+                    );
+                    let ttype = (0..ret.params.len())
+                        .map(|n| Term {
+                            meta: self.meta.clone(),
+                            variant: Box::new(TermVariant::Var(n)),
+                        })
+                        .fold(
+                            Term {
+                                meta: self.meta.clone(),
+                                variant: Box::new(TermVariant::Const(ret.constructor.clone())),
+                            },
+                            |f, v| Term {
+                                meta: self.meta.clone(),
+                                variant: Box::new(TermVariant::App(f, v)),
+                            },
+                        );
+                    local.push_onto(Entry::new(name.clone(), ttype));
+                    let ret_sort = ret.body.type_check(global, &mut local)?;
+                    let sort = ret_sort
+                        .expect_sort(global, &mut local)
+                        .map_err(|err| (self.meta.clone(), err))?;
+
+                    if sort == Sort::Prop && body.sort != Sort::Prop && body.constructors.len() > 1
+                    {
+                        todo!()
+                    }
+                };
+
+                let mut constrs = vec![false; body.constructors.len()];
+                for arm in arms {
+                    if let Some((i, constructor)) = body
+                        .constructors
+                        .iter()
+                        .enumerate()
+                        .find(|(_, c)| c.name == arm.constructor)
+                    {
+                        if constrs[i] {
+                            todo!()
+                        }
+                        constrs[i] = true;
+                        if arm.params.len() != params.len() + constructor.arity.len() {
+                            todo!()
+                        }
+                        let mut local = local.slot();
+                        local.extend(arm.params.iter().zip(params).zip(&args).map(
+                            |((x, param), value)| {
+                                Entry::with_value(x.clone(), value.clone(), param.ttype.clone())
+                            },
+                        ));
+                        local.extend(
+                            arm.params[params.len()..]
+                                .iter()
+                                .zip(&body.arity)
+                                .map(|(x, param)| Entry::new(x.clone(), param.ttype.clone())),
+                        );
+                        let arm_type = arm.body.type_check(global, &mut local)?;
+                        let exp_type = ret
+                            .body
+                            .push(ret.params.len() + 1)
+                            .subst_many(0, &args)
+                            .subst_many(0, &constructor.args)
+                            .subst_single(0, &constructor.ttype);
+                        arm_type
+                            .expect_convertable(&exp_type, global, &mut local)
+                            .map_err(|err| (arm.body.meta.clone(), err))?;
+                    } else {
+                        todo!()
+                    }
+                }
+
+                ret.body
+                    .subst_many(0, &args)
+                    .subst_many(0, &arity_args)
+                    .subst_single(0, t)
+            }
         })
     }
 }
