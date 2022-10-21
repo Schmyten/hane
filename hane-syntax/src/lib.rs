@@ -88,10 +88,17 @@ pub struct Binder {
     pub ttype: Expr,
 }
 
-#[derive(PartialEq, Eq)]
 pub struct Pattern {
-    constructor : String,
-    params : Vec<String>,
+    span: Span,
+    constructor: String,
+    params: Vec<String>,
+}
+
+impl Eq for Pattern {}
+impl PartialEq for Pattern {
+    fn eq(&self, other: &Self) -> bool {
+        self.constructor == other.constructor && self.params == other.params
+    }
 }
 
 #[derive(PartialEq, Eq)]

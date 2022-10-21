@@ -25,6 +25,7 @@ pub enum TermVariant<M, B> {
 
 #[derive(Clone)]
 pub struct MatchArm<M, B> {
+    pub meta: M,
     pub constructor: String,
     pub params: Vec<B>,
     pub body: Term<M, B>,
@@ -48,7 +49,9 @@ impl<M, B> PartialEq for TermVariant<M, B> {
             (Self::Bind(_, l0, l1, l2), Self::Bind(_, r0, r1, r2)) => {
                 l0 == r0 && l1 == r1 && l2 == r2
             }
-            (Self::Match(l0, _, l1, l2), Self::Match(r0, _, r1, r2)) => l0 == r0 && l1 == r1 && l2 == r2,
+            (Self::Match(l0, _, l1, l2), Self::Match(r0, _, r1, r2)) => {
+                l0 == r0 && l1 == r1 && l2 == r2
+            }
             _ => false,
         }
     }
@@ -125,12 +128,14 @@ impl<M: Clone, B: Clone> TermVariant<M, B> {
                 t.push_inner(cut, amount),
                 x.clone(),
                 MatchArm {
+                    meta: ret.meta.clone(),
                     constructor: ret.constructor.clone(),
                     params: ret.params.clone(),
                     body: ret.body.push_inner(cut + ret.params.len() + 1, amount),
                 },
                 arms.iter()
                     .map(|arm| MatchArm {
+                        meta: arm.meta.clone(),
                         constructor: arm.constructor.clone(),
                         params: arm.params.clone(),
                         body: arm.body.push_inner(cut + arm.params.len(), amount),
@@ -186,12 +191,14 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 t.subst_inner(push, f),
                 x.clone(),
                 MatchArm {
+                    meta: ret.meta.clone(),
                     constructor: ret.constructor.clone(),
                     params: ret.params.clone(),
                     body: ret.body.subst_inner(push + ret.params.len() + 1, f),
                 },
                 arms.iter()
                     .map(|arm| MatchArm {
+                        meta: arm.meta.clone(),
                         constructor: arm.constructor.clone(),
                         params: arm.params.clone(),
                         body: arm.body.subst_inner(push + arm.params.len(), f),
@@ -244,6 +251,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 t.try_subst_inner(push, f)?,
                 x.clone(),
                 MatchArm {
+                    meta: ret.meta.clone(),
                     constructor: ret.constructor.clone(),
                     params: ret.params.clone(),
                     body: ret.body.try_subst_inner(push + ret.params.len() + 1, f)?,
@@ -251,6 +259,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 arms.iter()
                     .map(|arm| {
                         Ok(MatchArm {
+                            meta: arm.meta.clone(),
                             constructor: arm.constructor.clone(),
                             params: arm.params.clone(),
                             body: arm.body.try_subst_inner(push + arm.params.len(), f)?,
@@ -389,8 +398,8 @@ impl<M: Clone, B: Clone> Term<M, B> {
 
                     let (i, params, bodies) = match global.get_entry(&ret.constructor) {
                         Some(GEntryRef::Inductive(i, params, bodies)) => (i, params, bodies),
-                        Some(_) => todo!(),
-                        None => todo!(),
+                        Some(_) => panic!("{} is not an inductive type", ret.constructor),
+                        None => panic!("{} is not defined", ret.constructor),
                     };
                     let body = &bodies[i];
 
@@ -399,10 +408,10 @@ impl<M: Clone, B: Clone> Term<M, B> {
                     let (hd, mut args) = t_type.strip_args();
                     if let TermVariant::Const(i) = *hd.variant {
                         if i != ret.constructor {
-                            todo!()
+                            panic!("{i} is not the inductive type {}", ret.constructor)
                         }
                     } else {
-                        todo!()
+                        panic!("{hd} is not the inductive type {}", ret.constructor)
                     };
                     args.truncate(params.len());
 
@@ -445,7 +454,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                         {
                             c
                         } else {
-                            todo!()
+                            panic!("{} is not a constructor of {}", arm.constructor, body.name)
                         };
 
                         let mut local = local.slot();
@@ -705,23 +714,67 @@ impl<M: Clone, B: Clone> Term<M, B> {
             TermVariant::Match(t, name, ret, arms) => {
                 let (i, params, bodies) = match global.get_entry(&ret.constructor) {
                     Some(GEntryRef::Inductive(i, params, bodies)) => (i, params, bodies),
-                    Some(_) => todo!(),
-                    None => todo!(),
+                    Some(_) => {
+                        return Err((
+                            ret.meta.clone(),
+                            TypeError::new(
+                                local,
+                                TypeErrorVariant::NotAnInductiveType(ret.constructor.clone()),
+                            ),
+                        ))
+                    }
+                    None => {
+                        return Err((
+                            ret.meta.clone(),
+                            TypeError::new(
+                                local,
+                                TypeErrorVariant::UndefinedConst(ret.constructor.clone()),
+                            ),
+                        ))
+                    }
                 };
                 let body = &bodies[i];
                 // Insure the parameter count on the return pattern is correct
                 if ret.params.len() != params.len() + body.arity.len() {
-                    todo!()
+                    return Err((
+                        ret.meta.clone(),
+                        TypeError::new(
+                            local,
+                            TypeErrorVariant::IncorrectParameterCount(
+                                params.len() + body.arity.len(),
+                                ret.params.len(),
+                            ),
+                        ),
+                    ));
                 }
-                let mut t_type = t.type_check(global, local)?;
-                t_type.normalize(global, local);
-                let (hd, mut args) = t_type.strip_args();
+                let t_type = t.type_check(global, local)?;
+                let mut norm = t_type.clone();
+                norm.normalize(global, local);
+                let (hd, mut args) = norm.strip_args();
                 if let TermVariant::Const(i) = *hd.variant {
                     if i != ret.constructor {
-                        todo!()
+                        return Err((
+                            t.meta.clone(),
+                            TypeError::new(
+                                local,
+                                TypeErrorVariant::NotOfExpectedInducitve(
+                                    ret.constructor.clone(),
+                                    t_type,
+                                ),
+                            ),
+                        ));
                     }
                 } else {
-                    todo!()
+                    return Err((
+                        t.meta.clone(),
+                        TypeError::new(
+                            local,
+                            TypeErrorVariant::NotOfExpectedInducitve(
+                                ret.constructor.clone(),
+                                t_type,
+                            ),
+                        ),
+                    ));
                 };
                 let arity_args = args.drain(params.len()..).collect::<Vec<_>>();
 
@@ -760,9 +813,20 @@ impl<M: Clone, B: Clone> Term<M, B> {
                         .expect_sort(global, &mut local)
                         .map_err(|err| (self.meta.clone(), err))?;
 
-                    if sort == Sort::Prop && body.sort != Sort::Prop && body.constructors.len() > 1
+                    if body.sort == Sort::Prop
+                        && sort != Sort::Prop
+                        && !body.constructors.is_empty()
                     {
-                        todo!()
+                        return Err((
+                            ret.meta.clone(),
+                            TypeError::new(
+                                &local,
+                                TypeErrorVariant::DisallowedEleminationSort(
+                                    body.sort.clone(),
+                                    sort,
+                                ),
+                            ),
+                        ));
                     }
                 };
 
@@ -775,16 +839,46 @@ impl<M: Clone, B: Clone> Term<M, B> {
                         .find(|(_, c)| c.name == arm.constructor)
                     {
                         if constrs[i] {
-                            todo!()
+                            return Err((
+                                arm.meta.clone(),
+                                TypeError::new(
+                                    local,
+                                    TypeErrorVariant::DupplicateConstructor(
+                                        arm.constructor.clone(),
+                                    ),
+                                ),
+                            ));
                         }
                         constrs[i] = true;
                         constructor
                     } else {
-                        todo!()
+                        return Err((
+                            arm.meta.clone(),
+                            TypeError::new(
+                                local,
+                                TypeErrorVariant::NotAConstructor(
+                                    body.name.clone(),
+                                    arm.constructor.clone(),
+                                    body.constructors
+                                        .iter()
+                                        .map(|constructor| constructor.name.clone())
+                                        .collect(),
+                                ),
+                            ),
+                        ));
                     };
 
                     if arm.params.len() != params.len() + constructor.arity.len() {
-                        todo!()
+                        return Err((
+                            arm.meta.clone(),
+                            TypeError::new(
+                                local,
+                                TypeErrorVariant::IncorrectParameterCount(
+                                    params.len() + constructor.arity.len(),
+                                    arm.params.len(),
+                                ),
+                            ),
+                        ));
                     }
                     let mut local = local.slot();
                     local.extend(arm.params.iter().zip(params).zip(&args).enumerate().map(
@@ -831,8 +925,21 @@ impl<M: Clone, B: Clone> Term<M, B> {
                         .map_err(|err| (arm.body.meta.clone(), err))?;
                 }
 
-                if !constrs.into_iter().all(|b| b) {
-                    todo!()
+                if !constrs.iter().all(|b| *b) {
+                    return Err((
+                        self.meta.clone(),
+                        TypeError::new(
+                            local,
+                            TypeErrorVariant::MissingConstructors(
+                                body.constructors
+                                    .iter()
+                                    .zip(constrs)
+                                    .filter(|(_, b)| !b)
+                                    .map(|(constructor, _)| constructor.name.clone())
+                                    .collect(),
+                            ),
+                        ),
+                    ));
                 }
 
                 ret.body

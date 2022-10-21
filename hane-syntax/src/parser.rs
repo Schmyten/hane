@@ -242,10 +242,12 @@ fn parse_match_arms(pair: Pair) -> Vec<(Pattern, Expr)> {
 
 fn parse_pattern(pair: Pair) -> Pattern {
     debug_assert_eq!(pair.as_rule(), Rule::pattern);
+    let span = Span::from_pest(pair.as_span());
     let mut pairs = pair.into_inner();
     let constructor = parse_ident(pairs.next().unwrap());
     let params = pairs.map(parse_ident).collect();
     Pattern {
+        span,
         constructor,
         params,
     }

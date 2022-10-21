@@ -260,6 +260,7 @@ impl Expr {
                     };
                     let params = names.pop().collect();
                     MatchArm {
+                        meta: pat.span,
                         constructor: pat.constructor,
                         params,
                         body,
@@ -279,6 +280,7 @@ impl Expr {
                         let body = body.lower(global, &mut names)?;
                         let params = names.pop().rev().collect();
                         Ok(MatchArm {
+                            meta: pat.span,
                             constructor: pat.constructor,
                             params,
                             body,

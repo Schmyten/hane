@@ -1,4 +1,4 @@
-use crate::{entry::Entry, Stack, Term};
+use crate::{entry::Entry, Stack, Term, Sort};
 
 pub enum CommandError<M, B> {
     NameAlreadyExists(String),
@@ -16,6 +16,13 @@ pub enum TypeErrorVariant<M, B> {
     IncompatibleTypes(Term<M, B>, Term<M, B>),
     NotAProduct(Term<M, B>),
     NotASort(Term<M, B>),
+    NotAnInductiveType(String),
+    NotAConstructor(String, String, Vec<String>),
+    IncorrectParameterCount(usize, usize),
+    NotOfExpectedInducitve(String, Term<M, B>),
+    DisallowedEleminationSort(Sort, Sort),
+    DupplicateConstructor(String),
+    MissingConstructors(Vec<String>),
     DebruijnOutOfScope(usize),
     UndefinedConst(String),
 }
