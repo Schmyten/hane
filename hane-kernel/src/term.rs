@@ -406,13 +406,9 @@ impl<M: Clone, B: Clone> Term<M, B> {
                     let mut t_type = t.type_check(global, local).ok().unwrap();
                     t_type.normalize(global, local);
                     let (hd, mut args) = t_type.strip_args();
-                    if let TermVariant::Const(i) = *hd.variant {
-                        if i != ret.constructor {
-                            panic!("{i} is not the inductive type {}", ret.constructor)
-                        }
-                    } else {
-                        panic!("{hd} is not the inductive type {}", ret.constructor)
-                    };
+                    if !hd.is_const(&ret.constructor) {
+                        panic!("{i} is not the inductive type {}", ret.constructor)
+                    }
                     args.truncate(params.len());
 
                     {
@@ -631,6 +627,15 @@ impl<M: Clone, B: Clone> Term<M, B> {
         }
     }
 
+    /// Return whether the term is a constant named `name`.
+    pub fn is_const(&self, name: &str) -> bool {
+        if let TermVariant::Const(c) = &*self.variant {
+            c == name
+        } else {
+            false
+        }
+    }
+
     pub fn type_check(
         &self,
         global: &Global<M, B>,
@@ -712,8 +717,8 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 t_subst.type_check(global, &mut local)?
             }
             TermVariant::Match(t, name, ret, arms) => {
-                let (i, params, bodies) = match global.get_entry(&ret.constructor) {
-                    Some(GEntryRef::Inductive(i, params, bodies)) => (i, params, bodies),
+                let (params, body) = match global.get_entry(&ret.constructor) {
+                    Some(GEntryRef::Inductive(i, params, bodies)) => (params, &bodies[i]),
                     Some(_) => {
                         return Err((
                             ret.meta.clone(),
@@ -733,7 +738,6 @@ impl<M: Clone, B: Clone> Term<M, B> {
                         ))
                     }
                 };
-                let body = &bodies[i];
                 // Insure the parameter count on the return pattern is correct
                 if ret.params.len() != params.len() + body.arity.len() {
                     return Err((
@@ -751,20 +755,8 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 let mut norm = t_type.clone();
                 norm.normalize(global, local);
                 let (hd, mut args) = norm.strip_args();
-                if let TermVariant::Const(i) = *hd.variant {
-                    if i != ret.constructor {
-                        return Err((
-                            t.meta.clone(),
-                            TypeError::new(
-                                local,
-                                TypeErrorVariant::NotOfExpectedInducitve(
-                                    ret.constructor.clone(),
-                                    t_type,
-                                ),
-                            ),
-                        ));
-                    }
-                } else {
+                // Ensure the type of `t` is of the same inductive type that we want to match on
+                if !hd.is_const(&ret.constructor) {
                     return Err((
                         t.meta.clone(),
                         TypeError::new(
@@ -779,6 +771,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 let arity_args = args.drain(params.len()..).collect::<Vec<_>>();
 
                 {
+                    // To typecheck the return type, we first need to put the type parameters into scope as well as a opaque version of the match argument.
                     let mut local = local.slot();
                     local.extend(ret.params.iter().zip(params).zip(&args).enumerate().map(
                         |(i, ((x, param), value))| {
@@ -893,6 +886,8 @@ impl<M: Clone, B: Clone> Term<M, B> {
                             .map(|(x, param)| Entry::new(x.clone(), param.ttype.clone())),
                     );
                     let arm_type = arm.body.type_check(global, &mut local)?;
+                    // `this` is the constructor applied to the pattern paramters
+                    // It looks like `arm.constructor 'n '(n-1) ... '1 '0`
                     let this = (0..arm.params.len())
                         .rev()
                         .map(|n| Term {
@@ -909,6 +904,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                                 variant: Box::new(TermVariant::App(f, v)),
                             },
                         );
+                    // The expected return type is moved into scope, then all the type arguments of the constructor are substituted into it.
                     let exp_type = ret.body.push(arm.params.len()).subst_many(
                         arm.params.len(),
                         constructor.args.len() + 1,

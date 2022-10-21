@@ -108,8 +108,8 @@ pub fn write_term<M>(
             {
                 let mut names = names.slot();
                 for x in &ret.params {
-                    let mut as_names = names.push(name);
-                    let x = fresh(x, &mut as_names);
+                    let as_names = names.push(name);
+                    let x = fresh(x, &as_names);
                     name = as_names.pop().next().unwrap();
                     write!(buf, " {x}")?;
                     names.push_onto(x);
@@ -126,8 +126,8 @@ pub fn write_term<M>(
                 sep = " |";
                 let mut names = names.slot();
                 for x in &arm.params {
-                    let mut as_names = names.push(name);
-                    let x = fresh(x, &mut as_names);
+                    let as_names = names.push(name);
+                    let x = fresh(x, &as_names);
                     name = as_names.pop().next().unwrap();
                     write!(buf, " {x}")?;
                     names.push_onto(x);

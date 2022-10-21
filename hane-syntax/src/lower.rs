@@ -247,7 +247,7 @@ impl Expr {
                     if !global.contains(&pat.constructor) {
                         return Err(SpanError {
                             span: self.span.clone(),
-                            err: LoweringError::UnknownVariable(pat.constructor.to_owned()),
+                            err: LoweringError::UnknownVariable(pat.constructor),
                         });
                     }
                     let mut names = names.slot();
@@ -272,7 +272,7 @@ impl Expr {
                         if !global.contains(&pat.constructor) {
                             return Err(SpanError {
                                 span: self.span.clone(),
-                                err: LoweringError::UnknownVariable(pat.constructor.to_owned()),
+                                err: LoweringError::UnknownVariable(pat.constructor),
                             });
                         }
                         let mut names = names.slot();

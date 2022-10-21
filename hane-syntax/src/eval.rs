@@ -102,7 +102,7 @@ impl Display for EvalError {
                     TypeErrorVariant::NotOfExpectedInducitve(_, ttype) => {
                         write!(f, "Found: ")?;
                         write_term(f, ttype, &mut names, 200)
-                    },
+                    }
                     TypeErrorVariant::DisallowedEleminationSort(_, _) => Ok(()),
                     TypeErrorVariant::DupplicateConstructor(_) => Ok(()),
                     TypeErrorVariant::MissingConstructors(_) => Ok(()),

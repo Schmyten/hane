@@ -9,6 +9,7 @@ pub struct Global<M, B> {
     env: Vec<(M, GEntry<M, B>)>,
 }
 
+/// A reference to a name in the global environment.
 pub(crate) enum GEntryRef<'a, M, B> {
     Definition(&'a str, &'a Term<M, B>, &'a Term<M, B>),
     Axiom(&'a str, &'a Term<M, B>),
@@ -22,6 +23,7 @@ enum GEntry<M, B> {
     Inductive(Vec<Binder<M, B>>, Vec<GIndBody<M, B>>),
 }
 
+/// A single inductive type in a mutually defined set in the global environment.
 pub(crate) struct GIndBody<M, B> {
     pub(crate) name: String,
     pub(crate) arity: Vec<Binder<M, B>>,
@@ -33,11 +35,11 @@ pub(crate) struct GIndBody<M, B> {
     pub(crate) constructors: Vec<GIndConstructor<M, B>>,
 }
 
+/// A Constructor of an inductive type.
 pub(crate) struct GIndConstructor<M, B> {
     pub(crate) name: String,
     pub(crate) arity: Vec<Binder<M, B>>,
     pub(crate) args: Vec<Term<M, B>>,
-    pub(crate) ttype: Term<M, B>,
     /// Shorthand for `∀ arity.., ttype`
     pub(crate) arity_type: Term<M, B>,
     /// Shorthand for `∀ param.. arity.., ttype`
@@ -103,6 +105,7 @@ impl<M: Clone, B: Clone> Global<M, B> {
         }
     }
 
+    /// Returns the type and value of the constant `name`.
     pub fn get(&self, name: &str) -> Option<EntryRef<M, B>> {
         self.env.iter().find_map(|(_, entry)| match entry {
             GEntry::Definition(x, ttype, value) => {
@@ -124,6 +127,7 @@ impl<M: Clone, B: Clone> Global<M, B> {
         })
     }
 
+    /// Returns a reference to the entry containing the constant `name` along with where inside the entry `name` was found.
     pub(crate) fn get_entry(&self, name: &str) -> Option<GEntryRef<M, B>> {
         self.env.iter().find_map(|(_, entry)| match entry {
             GEntry::Definition(x, ttype, val) => {
@@ -298,7 +302,7 @@ impl<M: Clone, B: Clone> Command<M, B> {
                         return Err((
                             body.ttype.meta,
                             CommandError::TypeError(TypeError::new(
-                                &mut local,
+                                &local,
                                 TypeErrorVariant::NotASort(norm),
                             )),
                         ));
@@ -345,17 +349,24 @@ impl<M: Clone, B: Clone> Command<M, B> {
                                 (constructor.ttype.meta.clone(), CommandError::TypeError(err))
                             })?;
 
+                            // Ensure the constructor produces the correct type
                             let mut norm = constructor.ttype.clone();
                             norm.normalize(global, &mut local);
                             let (arity, ttype) = norm.strip_products();
-                            let (hd, args) = ttype.clone().strip_args();
-                            if let TermVariant::Const(i) = *hd.variant {
-                                if i != body.name {
-                                    todo!()
-                                }
-                            } else {
-                                todo!()
+                            let (hd, args) = ttype.strip_args();
+                            if !hd.is_const(&body.name) {
+                                return Err((
+                                    constructor.ttype.meta.clone(),
+                                    CommandError::TypeError(TypeError::new(
+                                        &local,
+                                        TypeErrorVariant::NotOfExpectedInducitve(
+                                            body.name.clone(),
+                                            constructor.ttype.clone(),
+                                        ),
+                                    )),
+                                ));
                             }
+
                             let full_type = params.iter().cloned().rev().fold(
                                 constructor.ttype.clone(),
                                 |body, binder| Term {
@@ -372,7 +383,6 @@ impl<M: Clone, B: Clone> Command<M, B> {
                                 name: constructor.name,
                                 arity,
                                 args,
-                                ttype,
                                 arity_type: constructor.ttype,
                                 full_type,
                             })

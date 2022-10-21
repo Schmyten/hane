@@ -1,4 +1,4 @@
-use crate::{entry::Entry, Stack, Term, Sort};
+use crate::{entry::Entry, Sort, Stack, Term};
 
 pub enum CommandError<M, B> {
     NameAlreadyExists(String),
