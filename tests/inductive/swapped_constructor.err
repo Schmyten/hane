@@ -3,7 +3,7 @@
 3 | Definition false : False := I.
   |                             ^
   |
-  = Incompatible Types
+  = Invalid Subtype
 
 Expected: False
 Actual: True

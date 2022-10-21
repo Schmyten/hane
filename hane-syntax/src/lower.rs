@@ -277,7 +277,7 @@ impl Expr {
                         let mut names = names.slot();
                         names.extend(pat.params);
                         let body = body.lower(global, &mut names)?;
-                        let params = names.pop().collect();
+                        let params = names.pop().rev().collect();
                         Ok(MatchArm {
                             constructor: pat.constructor,
                             params,
