@@ -38,20 +38,33 @@ impl Span {
     }
 }
 
+#[derive(Clone)]
+pub struct Ident {
+    pub span: Span,
+    pub name: String,
+}
+
+impl Eq for Ident {}
+impl PartialEq for Ident {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
 pub struct Command {
     pub span: Span,
     pub variant: CommandVariant,
 }
 
 pub enum CommandVariant {
-    Definition(String, Expr, Expr),
-    Axiom(String, Expr),
+    Definition(Ident, Expr, Expr),
+    Axiom(Ident, Expr),
     Inductive(Vec<IndBody>),
 }
 
 /// A single type in a mutually defined inductive type set
 pub struct IndBody {
-    pub name: String,
+    pub name: Ident,
     pub params: Vec<Binder>,
     pub ttype: Expr,
     pub constructors: Vec<IndConstructor>,
@@ -59,7 +72,7 @@ pub struct IndBody {
 
 /// A single constructor of an inductive type
 pub struct IndConstructor {
-    pub name: String,
+    pub name: Ident,
     pub ttype: Expr,
 }
 
@@ -84,7 +97,7 @@ impl PartialEq for Expr {
 
 #[derive(PartialEq, Eq)]
 pub struct Binder {
-    pub name: String,
+    pub ident: Ident,
     pub ttype: Expr,
 }
 
@@ -95,7 +108,7 @@ pub enum ExprVariant {
     App(Expr, Expr),
     Product(Vec<Binder>, Expr),
     Abstract(Vec<Binder>, Expr),
-    Bind(String, Expr, Expr, Expr),
+    Bind(Ident, Expr, Expr, Expr),
 }
 
 pub struct SpanError<E> {

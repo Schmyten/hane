@@ -3,13 +3,20 @@ use std::{
     fmt::{self, Display, Formatter},
 };
 
-use crate::{Binder, Command, CommandVariant, Expr, ExprVariant, Span, SpanError};
-use hane_kernel::entry::Binder as LoweredBinder;
-use hane_kernel::{
-    Command as LoweredCommand, CommandVariant as LoweredCommandVariant, IndBody as LoweredIndBody,
-    IndConstructor as LoweredIndConstructor,
-};
-use hane_kernel::{Sort, Stack, Term, TermVariant};
+use crate::{Binder, Command, CommandVariant, Expr, ExprVariant, SpanError, Ident};
+use hane_kernel::{Sort, Stack};
+
+pub mod lowered {
+    use crate::{Ident, Span};
+
+    pub type Binder = hane_kernel::entry::Binder<Span, Ident>;
+    pub type Command = hane_kernel::Command<Span, Ident>;
+    pub type CommandVariant = hane_kernel::CommandVariant<Span, Ident>;
+    pub type IndBody = hane_kernel::IndBody<Span, Ident>;
+    pub type IndConstructor = hane_kernel::IndConstructor<Span, Ident>;
+    pub type Term = hane_kernel::Term<Span, Ident>;
+    pub type TermVariant = hane_kernel::TermVariant<Span, Ident>;
+}
 
 pub enum LoweringError {
     NameNotFree(String),
@@ -34,31 +41,31 @@ impl Command {
     pub fn lower(
         self,
         global: &mut HashSet<String>,
-    ) -> Result<LoweredCommand<Span, String>, SpanError<LoweringError>> {
+    ) -> Result<lowered::Command, SpanError<LoweringError>> {
         let mut names = Stack::new();
         let variant = match self.variant {
-            CommandVariant::Definition(name, ttype, value) => {
-                if global.contains(&name) {
+            CommandVariant::Definition(ident, ttype, value) => {
+                if global.contains(&ident.name) {
                     return Err(SpanError {
-                        span: self.span,
-                        err: LoweringError::NameNotFree(name),
+                        span: ident.span,
+                        err: LoweringError::NameNotFree(ident.name),
                     });
                 }
                 let ttype = ttype.lower(global, &mut names)?;
                 let value = value.lower(global, &mut names)?;
-                global.insert(name.clone());
-                LoweredCommandVariant::Definition(name, ttype, value)
+                global.insert(ident.name.clone());
+                lowered::CommandVariant::Definition(ident.name, ttype, value)
             }
-            CommandVariant::Axiom(name, ttype) => {
-                if global.contains(&name) {
+            CommandVariant::Axiom(ident, ttype) => {
+                if global.contains(&ident.name) {
                     return Err(SpanError {
                         span: self.span,
-                        err: LoweringError::NameNotFree(name),
+                        err: LoweringError::NameNotFree(ident.name),
                     });
                 }
                 let ttype = ttype.lower(global, &mut names)?;
-                global.insert(name.clone());
-                LoweredCommandVariant::Axiom(name, ttype)
+                global.insert(ident.name.clone());
+                lowered::CommandVariant::Axiom(ident.name, ttype)
             }
             CommandVariant::Inductive(mut bodies) => {
                 // The parameters must be syntactically the same on all the bodies.
@@ -84,7 +91,7 @@ impl Command {
                 let mut lowered_params = Vec::with_capacity(params.len());
                 let mut names = names.slot();
                 for param in params {
-                    let name = param.name.clone();
+                    let name = param.ident.clone();
                     lowered_params.push(param.lower(global, &mut names)?);
                     names.push_onto(name);
                 }
@@ -107,10 +114,10 @@ impl Command {
 
                 // With the types sorts lowered we can put the type names into the global name set as they are needed to handle the constructors
                 for body in &bodies {
-                    if !global.insert(body.name.clone()) {
+                    if !global.insert(body.name.name.clone()) {
                         return Err(SpanError {
-                            span: self.span.clone(),
-                            err: LoweringError::NameNotFree(body.name.clone()),
+                            span: body.name.span.clone(),
+                            err: LoweringError::NameNotFree(body.name.name.clone()),
                         });
                     }
                 }
@@ -124,14 +131,14 @@ impl Command {
                             .constructors
                             .into_iter()
                             .map(|constructor| {
-                                Ok(LoweredIndConstructor {
-                                    name: constructor.name,
+                                Ok(lowered::IndConstructor {
+                                    name: constructor.name.name,
                                     ttype: constructor.ttype.lower(global, &mut names)?,
                                 })
                             })
                             .collect::<Result<_, SpanError<LoweringError>>>()?;
-                        Ok(LoweredIndBody {
-                            name: body.name,
+                        Ok(lowered::IndBody {
+                            name: body.name.name,
                             ttype,
                             constructors,
                         })
@@ -149,10 +156,10 @@ impl Command {
                         }
                     }
                 }
-                LoweredCommandVariant::Inductive(lowered_params, lowered_bodies)
+                lowered::CommandVariant::Inductive(lowered_params, lowered_bodies)
             }
         };
-        Ok(LoweredCommand {
+        Ok(lowered::Command {
             meta: self.span,
             variant,
         })
@@ -163,11 +170,11 @@ impl Binder {
     pub fn lower(
         self,
         global: &HashSet<String>,
-        names: &mut Stack<String>,
-    ) -> Result<LoweredBinder<Span, String>, SpanError<LoweringError>> {
+        names: &mut Stack<Ident>,
+    ) -> Result<lowered::Binder, SpanError<LoweringError>> {
         let ttype = self.ttype.lower(global, names)?;
-        Ok(LoweredBinder {
-            x: self.name,
+        Ok(lowered::Binder {
+            x: self.ident,
             ttype,
         })
     }
@@ -177,15 +184,15 @@ impl Expr {
     pub fn lower(
         self,
         global: &HashSet<String>,
-        names: &mut Stack<String>,
-    ) -> Result<Term<Span, String>, SpanError<LoweringError>> {
+        names: &mut Stack<Ident>,
+    ) -> Result<lowered::Term, SpanError<LoweringError>> {
         let variant = match *self.variant {
-            ExprVariant::Sort(sort) => TermVariant::Sort(sort.lower()),
+            ExprVariant::Sort(sort) => lowered::TermVariant::Sort(sort.lower()),
             ExprVariant::Var(x) => {
-                if let Some((i, _)) = names.iter().enumerate().find(|(_, y)| x == **y) {
-                    TermVariant::Var(i)
+                if let Some((i, _)) = names.iter().enumerate().find(|(_, y)| x == y.name) {
+                    lowered::TermVariant::Var(i)
                 } else if global.contains(&x) {
-                    TermVariant::Const(x)
+                    lowered::TermVariant::Const(x)
                 } else {
                     return Err(SpanError {
                         span: self.span.clone(),
@@ -194,22 +201,22 @@ impl Expr {
                 }
             }
             ExprVariant::App(f, v) => {
-                TermVariant::App(f.lower(global, names)?, v.lower(global, names)?)
+                lowered::TermVariant::App(f.lower(global, names)?, v.lower(global, names)?)
             }
             ExprVariant::Product(binders, t) => {
                 let mut type_stack = Vec::new();
                 let mut names = names.slot();
-                for Binder { name, ttype } in binders {
+                for Binder { ident, ttype } in binders {
                     let lowered_type = ttype.lower(global, &mut names)?;
                     type_stack.push(lowered_type);
-                    names.push_onto(name);
+                    names.push_onto(ident);
                 }
                 let t = t.lower(global, &mut names)?;
                 let mut iter = names.pop().zip(type_stack.into_iter().rev());
 
-                let make_term = |inner, (name, ttype)| Term {
+                let make_term = |inner, (name, ttype)| lowered::Term {
                     meta: self.span.clone(),
-                    variant: Box::new(TermVariant::Product(name, ttype, inner)),
+                    variant: Box::new(lowered::TermVariant::Product(name, ttype, inner)),
                 };
                 let inner = iter.next().unwrap();
                 return Ok(iter.fold(make_term(t, inner), make_term));
@@ -217,17 +224,17 @@ impl Expr {
             ExprVariant::Abstract(binders, t) => {
                 let mut type_stack = Vec::new();
                 let mut names = names.slot();
-                for Binder { name, ttype } in binders {
+                for Binder { ident, ttype } in binders {
                     let lowered_type = ttype.lower(global, &mut names)?;
                     type_stack.push(lowered_type);
-                    names.push_onto(name);
+                    names.push_onto(ident);
                 }
                 let t = t.lower(global, &mut names)?;
                 let mut iter = names.pop().zip(type_stack.into_iter().rev());
 
-                let make_term = |inner, (name, ttype)| Term {
+                let make_term = |inner, (name, ttype)| lowered::Term {
                     meta: self.span.clone(),
-                    variant: Box::new(TermVariant::Abstract(name, ttype, inner)),
+                    variant: Box::new(lowered::TermVariant::Abstract(name, ttype, inner)),
                 };
                 let inner = iter.next().unwrap();
                 return Ok(iter.fold(make_term(t, inner), make_term));
@@ -239,10 +246,10 @@ impl Expr {
                 let t = t.lower(global, &mut names);
                 let x = names.pop().next().unwrap();
                 let t = t?;
-                TermVariant::Bind(x, x_tp, x_val, t)
+                lowered::TermVariant::Bind(x, x_tp, x_val, t)
             }
         };
-        Ok(Term {
+        Ok(lowered::Term {
             meta: self.span,
             variant: Box::new(variant),
         })

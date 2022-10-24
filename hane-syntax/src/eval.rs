@@ -2,15 +2,15 @@ use std::fmt::{self, Display, Formatter};
 
 use crate::{
     print::{write_local, write_term},
-    Span,
+    Span, Ident,
 };
 use hane_kernel::{entry::Entry, CommandError, Stack, TypeError, TypeErrorVariant};
 
-pub struct EvalError(pub CommandError<Span, String>);
+pub struct EvalError(pub CommandError<Span, Ident>);
 
 fn write_cause(
-    err: &TypeError<Span, String>,
-    local: &Stack<Entry<Span, String>>,
+    err: &TypeError<Span, Ident>,
+    local: &Stack<Entry<Span, Ident>>,
     f: &mut Formatter,
 ) -> fmt::Result {
     match &err.variant {
