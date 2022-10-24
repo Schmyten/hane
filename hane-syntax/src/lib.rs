@@ -125,6 +125,21 @@ impl Span {
             writeln!(f, "{0: >len$} |", "")?;
             write!(f, "{0: >len$} = ", "")?;
         } else {
+            let len = format!("{}", self.end.line).len();
+            writeln!(
+                f,
+                "{0: >len$}--> {1}:{2}:{3}",
+                "", path, self.start.line, self.start.col
+            )?;
+            writeln!(f, "{0: >len$} |", "")?;
+            let mut sep = "/";
+            for line in input.lines().take(self.end.line).skip(self.start.line - 1) {
+                writeln!(f, "{0} | {sep} {line}", "")?;
+                sep = "|";
+            }
+            writeln!(f, "{0: >len$} | |_{0:_>1$}^", "", self.end.col)?;
+            writeln!(f, "{0: >len$} |", "")?;
+            write!(f, "{0: >len$} = ", "")?;
         }
         Ok(())
     }
