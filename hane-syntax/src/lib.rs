@@ -133,8 +133,13 @@ impl Span {
             )?;
             writeln!(f, "{0: >len$} |", "")?;
             let mut sep = "/";
-            for (i, line) in input.lines().enumerate().take(self.end.line).skip(self.start.line - 1) {
-                writeln!(f, "{0} | {sep} {line}", i+1)?;
+            for (i, line) in input
+                .lines()
+                .enumerate()
+                .take(self.end.line)
+                .skip(self.start.line - 1)
+            {
+                writeln!(f, "{0} | {sep} {line}", i + 1)?;
                 sep = "|";
             }
             writeln!(f, "{0: >len$} | |_{0:_>1$}^", "", self.end.col)?;
