@@ -268,7 +268,7 @@ impl<M: Clone, B: Clone> Command<M, B> {
                         return Err((
                             body.ttype.meta,
                             CommandError::TypeError(TypeError::new(
-                                &mut local,
+                                &local,
                                 TypeErrorVariant::NotASort(norm),
                             )),
                         ));
