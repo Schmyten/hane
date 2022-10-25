@@ -2,7 +2,7 @@ use std::fmt::{self, Display, Formatter};
 
 use crate::{
     print::{write_local, write_term},
-    Span, Ident,
+    Ident, Span,
 };
 use hane_kernel::{entry::Entry, CommandError, Stack, TypeError, TypeErrorVariant};
 
