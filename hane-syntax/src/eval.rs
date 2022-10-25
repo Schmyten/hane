@@ -4,9 +4,9 @@ use crate::{
     print::{write_local, write_term},
     Ident, Span,
 };
-use hane_kernel::{entry::Entry, CommandError, Stack, TypeError, TypeErrorVariant};
+use hane_kernel::{entry::Entry, CommandError, Stack, TypeError, TypeErrorVariant, Global};
 
-pub struct EvalError(pub CommandError<Span, Ident>);
+pub struct EvalError<'a>(pub &'a Global<Span, Ident>, pub CommandError<Span, Ident>);
 
 fn write_cause(
     err: &TypeError<Span, Ident>,
@@ -21,36 +21,17 @@ fn write_cause(
         TypeErrorVariant::NotAnInductiveType(name) => {
             write!(f, "Expected an inductive type, Found {name}")
         }
-        TypeErrorVariant::NotAConstructor(ind, name, constructors) => {
-            write!(f, "{name} is not a constructor for {ind}.")?;
-            write!(f, " Constructors are: ")?;
-            let mut sep = "";
-            for constructor in constructors {
-                write!(f, "{sep}{constructor}")?;
-                sep = ", ";
-            }
-            Ok(())
-        }
         TypeErrorVariant::IncorrectParameterCount(expected, found) => {
             write!(f, "Expected {expected} parameters, found {found}")
+        }
+        TypeErrorVariant::IncorrectConstructorCount(expected, found) => {
+            write!(f, "Expected {expected} constructors, found {found}")
         }
         TypeErrorVariant::NotOfExpectedInducitve(ind, _) => {
             write!(f, "Expected a term of type {ind}")
         }
         TypeErrorVariant::DisallowedEleminationSort(s1, s2) => {
             write!(f, "{s1} cannot elemintate into {s2}")
-        }
-        TypeErrorVariant::DupplicateConstructor(_) => {
-            write!(f, "Constructor was previously covered")
-        }
-        TypeErrorVariant::MissingConstructors(constructors) => {
-            write!(f, "Missing the constructors: ")?;
-            let mut sep = "";
-            for constructor in constructors {
-                write!(f, "{sep}{constructor}")?;
-                sep = ", ";
-            }
-            Ok(())
         }
         TypeErrorVariant::DebruijnOutOfScope(n) => write!(
             f,
@@ -61,9 +42,10 @@ fn write_cause(
     }
 }
 
-impl Display for EvalError {
+impl<'a> Display for EvalError<'a> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match &self.0 {
+        let global = self.0;
+        match &self.1 {
             CommandError::NameAlreadyExists(name) => {
                 write!(f, "The name `{name}` has already been defined")
             }
@@ -71,41 +53,39 @@ impl Display for EvalError {
                 write_cause(err, &err.local, f)?;
                 writeln!(f)?;
                 let mut names = Stack::new();
-                let mut names = write_local(f, &err.local, &mut names)?;
+                let mut names = write_local(f, &err.local, global, &mut names)?;
                 writeln!(f)?;
                 match &err.variant {
                     TypeErrorVariant::NotSubtypeType(expected, actual) => {
                         write!(f, "Expected: ")?;
-                        write_term(f, expected, &mut names, 200)?;
+                        write_term(f, expected, global, &mut names, 200)?;
                         writeln!(f)?;
                         write!(f, "Actual: ")?;
-                        write_term(f, actual, &mut names, 200)
+                        write_term(f, actual, global, &mut names, 200)
                     }
                     TypeErrorVariant::IncompatibleTypes(expected, actual) => {
                         write!(f, "Expected: ")?;
-                        write_term(f, expected, &mut names, 200)?;
+                        write_term(f, expected, global, &mut names, 200)?;
                         writeln!(f)?;
                         write!(f, "Actual: ")?;
-                        write_term(f, actual, &mut names, 200)
+                        write_term(f, actual, global, &mut names, 200)
                     }
                     TypeErrorVariant::NotAProduct(ttype) => {
                         write!(f, "Found: ")?;
-                        write_term(f, ttype, &mut names, 200)
+                        write_term(f, ttype, global, &mut names, 200)
                     }
                     TypeErrorVariant::NotASort(ttype) => {
                         write!(f, "Found: ")?;
-                        write_term(f, ttype, &mut names, 200)
+                        write_term(f, ttype, global, &mut names, 200)
                     }
                     TypeErrorVariant::NotAnInductiveType(_) => Ok(()),
-                    TypeErrorVariant::NotAConstructor(_, _, _) => Ok(()),
                     TypeErrorVariant::IncorrectParameterCount(_, _) => Ok(()),
+                    TypeErrorVariant::IncorrectConstructorCount(_, _) => Ok(()),
                     TypeErrorVariant::NotOfExpectedInducitve(_, ttype) => {
                         write!(f, "Found: ")?;
-                        write_term(f, ttype, &mut names, 200)
+                        write_term(f, ttype, global, &mut names, 200)
                     }
                     TypeErrorVariant::DisallowedEleminationSort(_, _) => Ok(()),
-                    TypeErrorVariant::DupplicateConstructor(_) => Ok(()),
-                    TypeErrorVariant::MissingConstructors(_) => Ok(()),
                     TypeErrorVariant::DebruijnOutOfScope(_) => Ok(()),
                     TypeErrorVariant::UndefinedConst(_) => Ok(()),
                 }

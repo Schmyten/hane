@@ -309,6 +309,7 @@ impl Expr {
                         })
                     }
                 };
+                let ind = pat.constructor.name;
                 let ret = {
                     let mut names = names.slot();
                     names.extend(pat.params);
@@ -321,7 +322,6 @@ impl Expr {
                     let params = names.pop().rev().collect();
                     lowered::MatchArm {
                         meta: pat.constructor.span,
-                        constructor: pat.constructor.name,
                         params,
                         body,
                     }
@@ -353,7 +353,7 @@ impl Expr {
                         return Err(SpanError {
                             span: pat.constructor.span.clone(),
                             err: LoweringError::NotAConstructorOf(
-                                ret.constructor,
+                                ind,
                                 pat.constructor.name,
                                 constructors.clone(),
                             ),
@@ -366,7 +366,6 @@ impl Expr {
                     let params = names.pop().rev().collect();
                     let arm = lowered::MatchArm {
                         meta: pat.constructor.span,
-                        constructor: pat.constructor.name,
                         params,
                         body,
                     };
@@ -393,7 +392,7 @@ impl Expr {
                     })
                 }
 
-                lowered::TermVariant::Match(t, name, ret, arms)
+                lowered::TermVariant::Match(t, name, ind, ret, arms)
             }
         };
         Ok(lowered::Term {
