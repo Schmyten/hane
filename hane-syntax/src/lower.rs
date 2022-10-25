@@ -272,7 +272,7 @@ impl Expr {
                         name = names.pop().next().unwrap();
                         ret
                     };
-                    let params = names.pop().collect();
+                    let params = names.pop().rev().collect();
                     lowered::MatchArm {
                         meta: pat.constructor.span,
                         constructor: pat.constructor.name,
