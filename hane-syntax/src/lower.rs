@@ -3,7 +3,7 @@ use std::{
     fmt::{self, Display, Formatter},
 };
 
-use crate::{Binder, Command, CommandVariant, Expr, ExprVariant, SpanError, Ident};
+use crate::{Binder, Command, CommandVariant, Expr, ExprVariant, Ident, SpanError};
 use hane_kernel::{Sort, Stack};
 
 pub mod lowered {
@@ -59,7 +59,7 @@ impl Command {
             CommandVariant::Axiom(ident, ttype) => {
                 if global.contains(&ident.name) {
                     return Err(SpanError {
-                        span: self.span,
+                        span: ident.span,
                         err: LoweringError::NameNotFree(ident.name),
                     });
                 }
@@ -122,6 +122,8 @@ impl Command {
                     }
                 }
 
+                let mut cspans = Vec::new();
+
                 // Then we lower the constructors and build the lowered bodies
                 let lowered_bodies = bodies
                     .into_iter()
@@ -131,6 +133,7 @@ impl Command {
                             .constructors
                             .into_iter()
                             .map(|constructor| {
+                                cspans.push(constructor.name.span);
                                 Ok(lowered::IndConstructor {
                                     name: constructor.name.name,
                                     ttype: constructor.ttype.lower(global, &mut names)?,
@@ -146,16 +149,19 @@ impl Command {
                     .collect::<Result<Vec<_>, SpanError<LoweringError>>>()?;
 
                 // Finally we put the constructors into the global name set
-                for body in &lowered_bodies {
-                    for constructor in &body.constructors {
-                        if !global.insert(constructor.name.clone()) {
-                            return Err(SpanError {
-                                span: self.span.clone(),
+                lowered_bodies
+                    .iter()
+                    .flat_map(|body| &body.constructors)
+                    .zip(cspans)
+                    .try_for_each(|(constructor, span)| {
+                        global
+                            .insert(constructor.name.clone())
+                            .then_some(())
+                            .ok_or_else(|| SpanError {
+                                span,
                                 err: LoweringError::NameNotFree(constructor.name.clone()),
-                            });
-                        }
-                    }
-                }
+                            })
+                    })?;
                 lowered::CommandVariant::Inductive(lowered_params, lowered_bodies)
             }
         };
