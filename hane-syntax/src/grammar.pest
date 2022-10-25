@@ -12,7 +12,8 @@ inductive_constructor = { ident ~ ":" ~ expr }
 
 expr = { expr_inner+ }
 expr_inner = _{
-    expr_paren | sort | expr_var | expr_product | expr_abstract | expr_let_bind
+    expr_paren | sort | expr_var | expr_product | expr_abstract | expr_let_bind |
+    expr_match
 }
 expr_paren = { "(" ~ expr ~ ")" }
 expr_var = { ident }
@@ -21,6 +22,13 @@ expr_abstract = { keyword_fun ~ binders ~ "=>" ~ expr }
 expr_let_bind = {
     keyword_let ~ ident ~ ":" ~ expr ~ ":=" ~ expr ~ keyword_in ~ expr
 }
+expr_match = {
+    keyword_match ~ expr ~ keyword_as ~ ident ~ keyword_in ~ pattern ~ keyword_return ~ expr ~
+    keyword_with ~ expr_match_arms ~ keyword_end
+}
+expr_match_arms = { expr_match_arm? ~ ("|" ~ expr_match_arm)* }
+expr_match_arm = { pattern ~ "=>" ~ expr }
+pattern = { ident ~ ident* }
 
 binders_opt = { binder_base | binder_paren* }
 binders = { binder_base | binder_paren+ }
@@ -45,6 +53,10 @@ keyword = _{
    | keyword_fun
    | keyword_let
    | keyword_in
+   | keyword_match
+   | keyword_return
+   | keyword_as
+   | keyword_end
 }
 keyword_definition = @{ "Definition" ~ !(ASCII_ALPHANUMERIC | "_") }
 keyword_axiom = @{ "Axiom" ~ !(ASCII_ALPHANUMERIC | "_") }
@@ -57,6 +69,10 @@ keyword_forall = @{ "forall" ~ !(ASCII_ALPHANUMERIC | "_") }
 keyword_fun = @{ "fun" ~ !(ASCII_ALPHANUMERIC | "_") }
 keyword_let = @{ "let" ~ !(ASCII_ALPHANUMERIC | "_") }
 keyword_in = @{ "in" ~ !(ASCII_ALPHANUMERIC | "_") }
+keyword_match = @{ "match" ~ !(ASCII_ALPHANUMERIC | "_") }
+keyword_return = @{ "return" ~ !(ASCII_ALPHANUMERIC | "_") }
+keyword_as = @{ "as" ~ !(ASCII_ALPHANUMERIC | "_") }
+keyword_end = @{ "end" ~ !(ASCII_ALPHANUMERIC | "_") }
 
 number = @{ ASCII_DIGIT+ }
 

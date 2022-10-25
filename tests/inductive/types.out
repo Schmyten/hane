@@ -1,0 +1,11 @@
+Inductive prod (Set) (Set) : Set :=
+    | pair : forall['1] (forall['1] (((prod) ('3)) ('2))).
+Definition fst : forall[Set] (forall[Set] (forall[((prod) ('1)) ('0)] ('2))) := fun[Set] (fun[Set] (fun[((prod) ('1)) ('0)] (match '0 in prod return '5 with pair => '1 end))).
+Definition snd : forall[Set] (forall[Set] (forall[((prod) ('1)) ('0)] ('1))) := fun[Set] (fun[Set] (fun[((prod) ('1)) ('0)] (match '0 in prod return '4 with pair => '0 end))).
+Inductive sum (Set) (Set) : Set :=
+    | inl : forall['1] (((sum) ('2)) ('1))
+    | inr : forall['0] (((sum) ('2)) ('1)).
+Inductive sig (Set) (forall['0] (Prop)) : Set :=
+    | exist : forall['1] (forall[('1) ('0)] (((sig) ('3)) ('2))).
+Definition proj1_sig : forall[Set] (forall[forall['0] (Prop)] (forall[((sig) ('1)) ('0)] ('2))) := fun[Set] (fun[forall['0] (Prop)] (fun[((sig) ('1)) ('0)] (match '0 in sig return '5 with exist => '1 end))).
+Definition proj2_sig : forall[Set] (forall[forall['0] (Prop)] (forall[((sig) ('1)) ('0)] (('1) ((((proj1_sig) ('2)) ('1)) ('0))))) := fun[Set] (fun[forall['0] (Prop)] (fun[((sig) ('1)) ('0)] (match '0 in sig return ('4) ((((proj1_sig) ('5)) ('4)) ('0)) with exist => '0 end))).

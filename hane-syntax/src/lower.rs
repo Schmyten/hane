@@ -16,6 +16,7 @@ pub mod lowered {
     pub type IndConstructor = hane_kernel::IndConstructor<Span, Ident>;
     pub type Term = hane_kernel::Term<Span, Ident>;
     pub type TermVariant = hane_kernel::TermVariant<Span, Ident>;
+    pub type MatchArm = hane_kernel::term::MatchArm<Span, Ident>;
 }
 
 pub enum LoweringError {
@@ -253,6 +254,54 @@ impl Expr {
                 let x = names.pop().next().unwrap();
                 let t = t?;
                 lowered::TermVariant::Bind(x, x_tp, x_val, t)
+            }
+            ExprVariant::Match(t, mut name, pat, ret, arms) => {
+                let t = t.lower(global, names)?;
+                let ret = {
+                    if !global.contains(&pat.constructor.name) {
+                        return Err(SpanError {
+                            span: pat.constructor.span.clone(),
+                            err: LoweringError::UnknownVariable(pat.constructor.name),
+                        });
+                    }
+                    let mut names = names.slot();
+                    names.extend(pat.params);
+                    let body = {
+                        let mut names = names.push(name);
+                        let ret = ret.lower(global, &mut names)?;
+                        name = names.pop().next().unwrap();
+                        ret
+                    };
+                    let params = names.pop().rev().collect();
+                    lowered::MatchArm {
+                        meta: pat.constructor.span,
+                        constructor: pat.constructor.name,
+                        params,
+                        body,
+                    }
+                };
+                let arms = arms
+                    .into_iter()
+                    .map(|(pat, body)| {
+                        if !global.contains(&pat.constructor.name) {
+                            return Err(SpanError {
+                                span: pat.constructor.span.clone(),
+                                err: LoweringError::UnknownVariable(pat.constructor.name),
+                            });
+                        }
+                        let mut names = names.slot();
+                        names.extend(pat.params);
+                        let body = body.lower(global, &mut names)?;
+                        let params = names.pop().rev().collect();
+                        Ok(lowered::MatchArm {
+                            meta: pat.constructor.span,
+                            constructor: pat.constructor.name,
+                            params,
+                            body,
+                        })
+                    })
+                    .collect::<Result<_, SpanError<LoweringError>>>()?;
+                lowered::TermVariant::Match(t, name, ret, arms)
             }
         };
         Ok(lowered::Term {

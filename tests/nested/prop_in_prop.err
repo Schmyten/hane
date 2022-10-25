@@ -3,7 +3,7 @@
 1 | Definition prop : Prop := Prop.
   |                           ^^^^
   |
-  = Incompatible Types
+  = Invalid Subtype
 
 Expected: Prop
 Actual: Type{0}

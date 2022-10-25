@@ -101,6 +101,18 @@ pub struct Binder {
     pub ttype: Expr,
 }
 
+pub struct Pattern {
+    constructor: Ident,
+    params: Vec<Ident>,
+}
+
+impl Eq for Pattern {}
+impl PartialEq for Pattern {
+    fn eq(&self, other: &Self) -> bool {
+        self.constructor == other.constructor && self.params == other.params
+    }
+}
+
 #[derive(PartialEq, Eq)]
 pub enum ExprVariant {
     Sort(Sort),
@@ -109,6 +121,7 @@ pub enum ExprVariant {
     Product(Vec<Binder>, Expr),
     Abstract(Vec<Binder>, Expr),
     Bind(Ident, Expr, Expr, Expr),
+    Match(Expr, Ident, Pattern, Expr, Vec<(Pattern, Expr)>),
 }
 
 pub struct SpanError<E> {

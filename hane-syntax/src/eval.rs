@@ -18,6 +18,40 @@ fn write_cause(
         TypeErrorVariant::IncompatibleTypes(_, _) => write!(f, "Incompatible Types"),
         TypeErrorVariant::NotAProduct(_) => write!(f, "Expected a product"),
         TypeErrorVariant::NotASort(_) => write!(f, "Expected a sort"),
+        TypeErrorVariant::NotAnInductiveType(name) => {
+            write!(f, "Expected an inductive type, Found {name}")
+        }
+        TypeErrorVariant::NotAConstructor(ind, name, constructors) => {
+            write!(f, "{name} is not a constructor for {ind}.")?;
+            write!(f, " Constructors are: ")?;
+            let mut sep = "";
+            for constructor in constructors {
+                write!(f, "{sep}{constructor}")?;
+                sep = ", ";
+            }
+            Ok(())
+        }
+        TypeErrorVariant::IncorrectParameterCount(expected, found) => {
+            write!(f, "Expected {expected} parameters, found {found}")
+        }
+        TypeErrorVariant::NotOfExpectedInducitve(ind, _) => {
+            write!(f, "Expected a term of type {ind}")
+        }
+        TypeErrorVariant::DisallowedEleminationSort(s1, s2) => {
+            write!(f, "{s1} cannot elemintate into {s2}")
+        }
+        TypeErrorVariant::DupplicateConstructor(_) => {
+            write!(f, "Constructor was previously covered")
+        }
+        TypeErrorVariant::MissingConstructors(constructors) => {
+            write!(f, "Missing the constructors: ")?;
+            let mut sep = "";
+            for constructor in constructors {
+                write!(f, "{sep}{constructor}")?;
+                sep = ", ";
+            }
+            Ok(())
+        }
         TypeErrorVariant::DebruijnOutOfScope(n) => write!(
             f,
             "Debruijn index {n} out of scope. The local environment only contains {} names.",
@@ -62,6 +96,16 @@ impl Display for EvalError {
                         write!(f, "Found: ")?;
                         write_term(f, ttype, &mut names, 200)
                     }
+                    TypeErrorVariant::NotAnInductiveType(_) => Ok(()),
+                    TypeErrorVariant::NotAConstructor(_, _, _) => Ok(()),
+                    TypeErrorVariant::IncorrectParameterCount(_, _) => Ok(()),
+                    TypeErrorVariant::NotOfExpectedInducitve(_, ttype) => {
+                        write!(f, "Found: ")?;
+                        write_term(f, ttype, &mut names, 200)
+                    }
+                    TypeErrorVariant::DisallowedEleminationSort(_, _) => Ok(()),
+                    TypeErrorVariant::DupplicateConstructor(_) => Ok(()),
+                    TypeErrorVariant::MissingConstructors(_) => Ok(()),
                     TypeErrorVariant::DebruijnOutOfScope(_) => Ok(()),
                     TypeErrorVariant::UndefinedConst(_) => Ok(()),
                 }

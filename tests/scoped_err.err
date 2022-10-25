@@ -3,7 +3,7 @@
 1 | Definition err : Prop := forall (T : Type{0}) (P : forall T : Prop, T), P T.
   |                                                                         ^^^
   |
-  = Incompatible Types
+  = Invalid Subtype
 T: Type{0}
 P: forall T0 : Prop, T0
 

@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 use std::fmt::{self, Display, Formatter};
 
 use crate::entry::{Binder, Entry, EntryRef};
+use crate::global::GEntryRef;
 use crate::{Global, Sort, Stack, TypeError, TypeErrorVariant};
 
 #[derive(Clone)]
@@ -19,6 +20,15 @@ pub enum TermVariant<M, B> {
     Product(B, Term<M, B>, Term<M, B>),
     Abstract(B, Term<M, B>, Term<M, B>),
     Bind(B, Term<M, B>, Term<M, B>, Term<M, B>),
+    Match(Term<M, B>, B, MatchArm<M, B>, Vec<MatchArm<M, B>>),
+}
+
+#[derive(Clone)]
+pub struct MatchArm<M, B> {
+    pub meta: M,
+    pub constructor: String,
+    pub params: Vec<B>,
+    pub body: Term<M, B>,
 }
 
 impl<M, B> PartialEq for Term<M, B> {
@@ -39,8 +49,17 @@ impl<M, B> PartialEq for TermVariant<M, B> {
             (Self::Bind(_, l0, l1, l2), Self::Bind(_, r0, r1, r2)) => {
                 l0 == r0 && l1 == r1 && l2 == r2
             }
+            (Self::Match(l0, _, l1, l2), Self::Match(r0, _, r1, r2)) => {
+                l0 == r0 && l1 == r1 && l2 == r2
+            }
             _ => false,
         }
+    }
+}
+
+impl<M, B> PartialEq for MatchArm<M, B> {
+    fn eq(&self, other: &Self) -> bool {
+        self.constructor == other.constructor && self.body == other.body
     }
 }
 
@@ -57,6 +76,19 @@ impl<M, B> Display for TermVariant<M, B> {
             TermVariant::Product(_, t1, t2) => write!(f, "forall[{}] ({})", t1, t2),
             TermVariant::Abstract(_, t1, t2) => write!(f, "fun[{}] ({})", t1, t2),
             TermVariant::Bind(_, t1, t2, t3) => write!(f, "let[{} : {}] ({})", t1, t2, t3),
+            TermVariant::Match(t, _, ret, arms) => {
+                write!(
+                    f,
+                    "match {t} in {} return {} with",
+                    ret.constructor, ret.body
+                )?;
+                let mut sep = "";
+                for arm in arms {
+                    write!(f, "{sep} {} => {}", arm.constructor, arm.body)?;
+                    sep = " |";
+                }
+                write!(f, " end")
+            }
         }
     }
 }
@@ -91,6 +123,24 @@ impl<M: Clone, B: Clone> TermVariant<M, B> {
                 x_tp.push_inner(cut, amount),
                 x_val.push_inner(cut, amount),
                 t.push_inner(cut + 1, amount),
+            ),
+            TermVariant::Match(t, x, ret, arms) => TermVariant::Match(
+                t.push_inner(cut, amount),
+                x.clone(),
+                MatchArm {
+                    meta: ret.meta.clone(),
+                    constructor: ret.constructor.clone(),
+                    params: ret.params.clone(),
+                    body: ret.body.push_inner(cut + ret.params.len() + 1, amount),
+                },
+                arms.iter()
+                    .map(|arm| MatchArm {
+                        meta: arm.meta.clone(),
+                        constructor: arm.constructor.clone(),
+                        params: arm.params.clone(),
+                        body: arm.body.push_inner(cut + arm.params.len(), amount),
+                    })
+                    .collect(),
             ),
         }
     }
@@ -137,6 +187,24 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 x_val.subst_inner(push, f),
                 t.subst_inner(push + 1, f),
             ),
+            TermVariant::Match(t, x, ret, arms) => TermVariant::Match(
+                t.subst_inner(push, f),
+                x.clone(),
+                MatchArm {
+                    meta: ret.meta.clone(),
+                    constructor: ret.constructor.clone(),
+                    params: ret.params.clone(),
+                    body: ret.body.subst_inner(push + ret.params.len() + 1, f),
+                },
+                arms.iter()
+                    .map(|arm| MatchArm {
+                        meta: arm.meta.clone(),
+                        constructor: arm.constructor.clone(),
+                        params: arm.params.clone(),
+                        body: arm.body.subst_inner(push + arm.params.len(), f),
+                    })
+                    .collect(),
+            ),
         };
         Term {
             meta: self.meta.clone(),
@@ -179,6 +247,26 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 x_val.try_subst_inner(push, f)?,
                 t.try_subst_inner(push + 1, f)?,
             ),
+            TermVariant::Match(t, x, ret, arms) => TermVariant::Match(
+                t.try_subst_inner(push, f)?,
+                x.clone(),
+                MatchArm {
+                    meta: ret.meta.clone(),
+                    constructor: ret.constructor.clone(),
+                    params: ret.params.clone(),
+                    body: ret.body.try_subst_inner(push + ret.params.len() + 1, f)?,
+                },
+                arms.iter()
+                    .map(|arm| {
+                        Ok(MatchArm {
+                            meta: arm.meta.clone(),
+                            constructor: arm.constructor.clone(),
+                            params: arm.params.clone(),
+                            body: arm.body.try_subst_inner(push + arm.params.len(), f)?,
+                        })
+                    })
+                    .collect::<Result<_, E>>()?,
+            ),
         };
         Ok(Term {
             meta: self.meta.clone(),
@@ -213,6 +301,30 @@ impl<M: Clone, B: Clone> Term<M, B> {
             }),
         })
         .ok()
+    }
+
+    pub fn subst_many<'a>(
+        &'a self,
+        n: usize,
+        len: usize,
+        vals: impl Fn(usize) -> &'a Self,
+    ) -> Self {
+        self.subst(|meta, x, push| {
+            if x < n + push {
+                Term {
+                    meta: meta.clone(),
+                    variant: Box::new(TermVariant::Var(x)),
+                }
+            } else if x < n + push + len {
+                let i = n + push + len - 1 - x;
+                vals(i).push(push)
+            } else {
+                Term {
+                    meta: meta.clone(),
+                    variant: Box::new(TermVariant::Var(x - len)),
+                }
+            }
+        })
     }
 
     pub fn normalize(&mut self, global: &Global<M, B>, local: &mut Stack<Entry<M, B>>) {
@@ -260,6 +372,102 @@ impl<M: Clone, B: Clone> Term<M, B> {
                     *self = t.subst_single(0, val);
                     continue;
                 }
+                TermVariant::Match(t, name, ret, arms) => {
+                    t.normalize(global, local);
+
+                    // ι reduction (Evaluate match expresions)
+                    if let TermVariant::Const(constructor) = &*t.app_head().variant {
+                        if let Some(arm) =
+                            arms.iter_mut().find(|arm| arm.constructor == *constructor)
+                        {
+                            let body = Term {
+                                meta: arm.body.meta.clone(),
+                                variant: Box::new(TermVariant::Sort(Sort::Prop)),
+                            };
+                            let body = std::mem::replace(&mut arm.body, body);
+                            let t_rep = Term {
+                                meta: t.meta.clone(),
+                                variant: Box::new(TermVariant::Sort(Sort::Prop)),
+                            };
+                            let t = std::mem::replace(t, t_rep);
+                            let (_, args) = t.strip_args();
+                            *self = body.subst_many(0, args.len(), |i| &args[i]);
+                            continue;
+                        }
+                    }
+
+                    let (i, params, bodies) = match global.get_entry(&ret.constructor) {
+                        Some(GEntryRef::Inductive(i, params, bodies)) => (i, params, bodies),
+                        Some(_) => panic!("{} is not an inductive type", ret.constructor),
+                        None => panic!("{} is not defined", ret.constructor),
+                    };
+                    let body = &bodies[i];
+
+                    let mut t_type = t.type_check(global, local).ok().unwrap();
+                    t_type.normalize(global, local);
+                    let (hd, mut args) = t_type.strip_args();
+                    if !hd.is_const(&ret.constructor) {
+                        panic!("{i} is not the inductive type {}", ret.constructor)
+                    }
+                    args.truncate(params.len());
+
+                    {
+                        let mut local = local.slot();
+                        local.extend(ret.params.iter().zip(params).zip(&args).enumerate().map(
+                            |(i, ((x, param), value))| {
+                                Entry::with_value(x.clone(), value.push(i), param.ttype.clone())
+                            },
+                        ));
+                        local.extend(
+                            ret.params[params.len()..]
+                                .iter()
+                                .zip(&body.arity)
+                                .map(|(x, param)| Entry::new(x.clone(), param.ttype.clone())),
+                        );
+                        let ttype = (0..ret.params.len())
+                            .rev()
+                            .map(|n| Term {
+                                meta: self.meta.clone(),
+                                variant: Box::new(TermVariant::Var(n)),
+                            })
+                            .fold(
+                                Term {
+                                    meta: self.meta.clone(),
+                                    variant: Box::new(TermVariant::Const(ret.constructor.clone())),
+                                },
+                                |f, v| Term {
+                                    meta: self.meta.clone(),
+                                    variant: Box::new(TermVariant::App(f, v)),
+                                },
+                            );
+                        local.push_onto(Entry::new(name.clone(), ttype));
+                        ret.body.normalize(global, &mut local);
+                    }
+
+                    for arm in arms {
+                        let constructor = if let Some(c) =
+                            body.constructors.iter().find(|c| c.name == arm.constructor)
+                        {
+                            c
+                        } else {
+                            panic!("{} is not a constructor of {}", arm.constructor, body.name)
+                        };
+
+                        let mut local = local.slot();
+                        local.extend(arm.params.iter().zip(params).zip(&args).enumerate().map(
+                            |(i, ((x, param), value))| {
+                                Entry::with_value(x.clone(), value.push(i), param.ttype.clone())
+                            },
+                        ));
+                        local.extend(
+                            arm.params[params.len()..]
+                                .iter()
+                                .zip(&constructor.arity)
+                                .map(|(x, param)| Entry::new(x.clone(), param.ttype.clone())),
+                        );
+                        arm.body.normalize(global, &mut local);
+                    }
+                }
             }
             break;
         }
@@ -283,6 +491,13 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 body.eta();
             }
             TermVariant::Bind(_, _, _, _) => unreachable!(),
+            TermVariant::Match(t, _, ret, arms) => {
+                t.eta();
+                ret.body.eta();
+                for arm in arms {
+                    arm.body.eta();
+                }
+            }
         }
 
         if let TermVariant::Abstract(_, _, body) = &*self.variant {
@@ -335,17 +550,17 @@ impl<M: Clone, B: Clone> Term<M, B> {
         local: &mut Stack<Entry<M, B>>,
     ) -> Result<(), TypeError<M, B>> {
         let mut this = self.clone();
-        let mut other = other.clone();
+        let mut other0 = other.clone();
         this.normalize(global, local);
         this.eta();
-        other.normalize(global, local);
-        other.eta();
-        if this.subtype_inner(&other, global) {
+        other0.normalize(global, local);
+        other0.eta();
+        if this.subtype_inner(&other0, global) {
             Ok(())
         } else {
             Err(TypeError::new(
                 local,
-                TypeErrorVariant::IncompatibleTypes(other.clone(), self.clone()),
+                TypeErrorVariant::NotSubtypeType(other.clone(), self.clone()),
             ))
         }
     }
@@ -371,6 +586,15 @@ impl<M: Clone, B: Clone> Term<M, B> {
         }
         args.reverse();
         (self, args)
+    }
+
+    /// Finds the application head of a term.
+    /// If the input is not an application, it is returned unchanged.
+    pub fn app_head(mut self: &Self) -> &Self {
+        while let TermVariant::App(fun, _) = &*self.variant {
+            self = fun
+        }
+        self
     }
 
     pub fn expect_sort(
@@ -400,6 +624,15 @@ impl<M: Clone, B: Clone> Term<M, B> {
             Ok((input_type, output_type))
         } else {
             Err(TypeError::new(local, TypeErrorVariant::NotAProduct(self)))
+        }
+    }
+
+    /// Return whether the term is a constant named `name`.
+    pub fn is_const(&self, name: &str) -> bool {
+        if let TermVariant::Const(c) = &*self.variant {
+            c == name
+        } else {
+            false
         }
     }
 
@@ -482,6 +715,239 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 let t_subst = t.subst_single(0, x_val);
                 let mut local = local.push(Entry::new(x.clone(), x_tp.clone()));
                 t_subst.type_check(global, &mut local)?
+            }
+            TermVariant::Match(t, name, ret, arms) => {
+                let (params, body) = match global.get_entry(&ret.constructor) {
+                    Some(GEntryRef::Inductive(i, params, bodies)) => (params, &bodies[i]),
+                    Some(_) => {
+                        return Err((
+                            ret.meta.clone(),
+                            TypeError::new(
+                                local,
+                                TypeErrorVariant::NotAnInductiveType(ret.constructor.clone()),
+                            ),
+                        ))
+                    }
+                    None => {
+                        return Err((
+                            ret.meta.clone(),
+                            TypeError::new(
+                                local,
+                                TypeErrorVariant::UndefinedConst(ret.constructor.clone()),
+                            ),
+                        ))
+                    }
+                };
+                // Insure the parameter count on the return pattern is correct
+                if ret.params.len() != params.len() + body.arity.len() {
+                    return Err((
+                        ret.meta.clone(),
+                        TypeError::new(
+                            local,
+                            TypeErrorVariant::IncorrectParameterCount(
+                                params.len() + body.arity.len(),
+                                ret.params.len(),
+                            ),
+                        ),
+                    ));
+                }
+                let t_type = t.type_check(global, local)?;
+                let mut norm = t_type.clone();
+                norm.normalize(global, local);
+                let (hd, mut args) = norm.strip_args();
+                // Ensure the type of `t` is of the same inductive type that we want to match on
+                if !hd.is_const(&ret.constructor) {
+                    return Err((
+                        t.meta.clone(),
+                        TypeError::new(
+                            local,
+                            TypeErrorVariant::NotOfExpectedInducitve(
+                                ret.constructor.clone(),
+                                t_type,
+                            ),
+                        ),
+                    ));
+                };
+                let arity_args = args.drain(params.len()..).collect::<Vec<_>>();
+
+                {
+                    // To typecheck the return type, we first need to put the type parameters into scope as well as a opaque version of the match argument.
+                    let mut local = local.slot();
+                    local.extend(ret.params.iter().zip(params).zip(&args).enumerate().map(
+                        |(i, ((x, param), value))| {
+                            Entry::with_value(x.clone(), value.push(i), param.ttype.clone())
+                        },
+                    ));
+                    local.extend(
+                        ret.params[params.len()..]
+                            .iter()
+                            .zip(&body.arity)
+                            .map(|(x, param)| Entry::new(x.clone(), param.ttype.clone())),
+                    );
+                    let ttype = (0..ret.params.len())
+                        .rev()
+                        .map(|n| Term {
+                            meta: self.meta.clone(),
+                            variant: Box::new(TermVariant::Var(n)),
+                        })
+                        .fold(
+                            Term {
+                                meta: self.meta.clone(),
+                                variant: Box::new(TermVariant::Const(ret.constructor.clone())),
+                            },
+                            |f, v| Term {
+                                meta: self.meta.clone(),
+                                variant: Box::new(TermVariant::App(f, v)),
+                            },
+                        );
+                    local.push_onto(Entry::new(name.clone(), ttype));
+                    let ret_sort = ret.body.type_check(global, &mut local)?;
+                    let sort = ret_sort
+                        .expect_sort(global, &mut local)
+                        .map_err(|err| (self.meta.clone(), err))?;
+
+                    if body.sort == Sort::Prop
+                        && sort != Sort::Prop
+                        && !body.constructors.is_empty()
+                    {
+                        return Err((
+                            ret.meta.clone(),
+                            TypeError::new(
+                                &local,
+                                TypeErrorVariant::DisallowedEleminationSort(
+                                    body.sort.clone(),
+                                    sort,
+                                ),
+                            ),
+                        ));
+                    }
+                };
+
+                let mut constrs = vec![false; body.constructors.len()];
+                for arm in arms {
+                    let constructor = if let Some((i, constructor)) = body
+                        .constructors
+                        .iter()
+                        .enumerate()
+                        .find(|(_, c)| c.name == arm.constructor)
+                    {
+                        if constrs[i] {
+                            return Err((
+                                arm.meta.clone(),
+                                TypeError::new(
+                                    local,
+                                    TypeErrorVariant::DupplicateConstructor(
+                                        arm.constructor.clone(),
+                                    ),
+                                ),
+                            ));
+                        }
+                        constrs[i] = true;
+                        constructor
+                    } else {
+                        return Err((
+                            arm.meta.clone(),
+                            TypeError::new(
+                                local,
+                                TypeErrorVariant::NotAConstructor(
+                                    body.name.clone(),
+                                    arm.constructor.clone(),
+                                    body.constructors
+                                        .iter()
+                                        .map(|constructor| constructor.name.clone())
+                                        .collect(),
+                                ),
+                            ),
+                        ));
+                    };
+
+                    if arm.params.len() != params.len() + constructor.arity.len() {
+                        return Err((
+                            arm.meta.clone(),
+                            TypeError::new(
+                                local,
+                                TypeErrorVariant::IncorrectParameterCount(
+                                    params.len() + constructor.arity.len(),
+                                    arm.params.len(),
+                                ),
+                            ),
+                        ));
+                    }
+                    let mut local = local.slot();
+                    local.extend(arm.params.iter().zip(params).zip(&args).enumerate().map(
+                        |(i, ((x, param), value))| {
+                            Entry::with_value(x.clone(), value.push(i), param.ttype.clone())
+                        },
+                    ));
+                    local.extend(
+                        arm.params[params.len()..]
+                            .iter()
+                            .zip(&constructor.arity)
+                            .map(|(x, param)| Entry::new(x.clone(), param.ttype.clone())),
+                    );
+                    let arm_type = arm.body.type_check(global, &mut local)?;
+                    // `this` is the constructor applied to the pattern paramters
+                    // It looks like `arm.constructor 'n '(n-1) ... '1 '0`
+                    let this = (0..arm.params.len())
+                        .rev()
+                        .map(|n| Term {
+                            meta: self.meta.clone(),
+                            variant: Box::new(TermVariant::Var(n)),
+                        })
+                        .fold(
+                            Term {
+                                meta: self.meta.clone(),
+                                variant: Box::new(TermVariant::Const(arm.constructor.clone())),
+                            },
+                            |f, v| Term {
+                                meta: self.meta.clone(),
+                                variant: Box::new(TermVariant::App(f, v)),
+                            },
+                        );
+                    // The expected return type is moved into scope, then all the type arguments of the constructor are substituted into it.
+                    let exp_type = ret.body.push(arm.params.len()).subst_many(
+                        arm.params.len(),
+                        constructor.args.len() + 1,
+                        |i| {
+                            if i < constructor.args.len() {
+                                &constructor.args[i]
+                            } else {
+                                &this
+                            }
+                        },
+                    );
+                    arm_type
+                        .expect_subtype(&exp_type, global, &mut local)
+                        .map_err(|err| (arm.body.meta.clone(), err))?;
+                }
+
+                if !constrs.iter().all(|b| *b) {
+                    return Err((
+                        self.meta.clone(),
+                        TypeError::new(
+                            local,
+                            TypeErrorVariant::MissingConstructors(
+                                body.constructors
+                                    .iter()
+                                    .zip(constrs)
+                                    .filter(|(_, b)| !b)
+                                    .map(|(constructor, _)| constructor.name.clone())
+                                    .collect(),
+                            ),
+                        ),
+                    ));
+                }
+
+                ret.body
+                    .subst_many(0, args.len() + arity_args.len() + 1, |i| {
+                        if i < args.len() {
+                            &args[i]
+                        } else if i < args.len() + arity_args.len() {
+                            &arity_args[i - args.len()]
+                        } else {
+                            t
+                        }
+                    })
             }
         })
     }
