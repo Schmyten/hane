@@ -388,8 +388,8 @@ impl Expr {
                 if !missed.is_empty() {
                     return Err(SpanError {
                         span: self.span,
-                        err: LoweringError::MissingConstructors(missed)
-                    })
+                        err: LoweringError::MissingConstructors(missed),
+                    });
                 }
 
                 lowered::TermVariant::Match(t, name, ind, ret, arms)

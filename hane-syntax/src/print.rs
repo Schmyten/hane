@@ -1,6 +1,6 @@
 use std::fmt::{self, Write};
 
-use hane_kernel::{entry::Entry, stack::StackSlot, term::TermVariant, Stack, global::GEntryRef};
+use hane_kernel::{entry::Entry, global::GEntryRef, stack::StackSlot, term::TermVariant, Stack};
 
 use crate::Ident;
 
@@ -112,11 +112,12 @@ pub fn write_term<M: Clone>(
             write_term(buf, t, global, names, 200)?;
             let mut name = fresh(name, names);
             write!(buf, " as {} in {}", name.name, ind)?;
-            let constructors = if let GEntryRef::Inductive(i, _, bodies) = global.get_entry(ind).unwrap() {
-                &*bodies[i].constructors
-            } else {
-                panic!()
-            };
+            let constructors =
+                if let GEntryRef::Inductive(i, _, bodies) = global.get_entry(ind).unwrap() {
+                    &*bodies[i].constructors
+                } else {
+                    panic!()
+                };
             {
                 let mut names = names.slot();
                 for x in &ret.params {

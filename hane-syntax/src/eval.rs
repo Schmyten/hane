@@ -4,7 +4,7 @@ use crate::{
     print::{write_local, write_term},
     Ident, Span,
 };
-use hane_kernel::{entry::Entry, CommandError, Stack, TypeError, TypeErrorVariant, Global};
+use hane_kernel::{entry::Entry, CommandError, Global, Stack, TypeError, TypeErrorVariant};
 
 pub struct EvalError<'a>(pub &'a Global<Span, Ident>, pub CommandError<Span, Ident>);
 

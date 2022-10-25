@@ -369,7 +369,9 @@ impl<M: Clone, B: Clone> Term<M, B> {
 
                     // ι reduction (Evaluate match expresions)
                     if let TermVariant::Const(constructor) = &*t.app_head().variant {
-                        if let GEntryRef::InductiveConstructor(_, j, _, _) = global.get_entry(constructor).unwrap() {
+                        if let GEntryRef::InductiveConstructor(_, j, _, _) =
+                            global.get_entry(constructor).unwrap()
+                        {
                             let arm = &mut arms[j];
                             let body = Term {
                                 meta: arm.body.meta.clone(),
@@ -387,7 +389,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                         }
                     }
 
-                    let (i, params, bodies) = match global.get_entry(&ind) {
+                    let (i, params, bodies) = match global.get_entry(ind) {
                         Some(GEntryRef::Inductive(i, params, bodies)) => (i, params, bodies),
                         Some(_) => panic!("{ind} is not an inductive type"),
                         None => panic!("{ind} is not defined"),
@@ -397,7 +399,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                     let mut t_type = t.type_check(global, local).ok().unwrap();
                     t_type.normalize(global, local);
                     let (hd, mut args) = t_type.strip_args();
-                    if !hd.is_const(&ind) {
+                    if !hd.is_const(ind) {
                         panic!("{i} is not the inductive type {ind}")
                     }
                     args.truncate(params.len());
@@ -700,7 +702,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 t_subst.type_check(global, &mut local)?
             }
             TermVariant::Match(t, name, ind, ret, arms) => {
-                let (params, body) = match global.get_entry(&ind) {
+                let (params, body) = match global.get_entry(ind) {
                     Some(GEntryRef::Inductive(i, params, bodies)) => (params, &bodies[i]),
                     Some(_) => {
                         return Err((
@@ -714,10 +716,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                     None => {
                         return Err((
                             ret.meta.clone(),
-                            TypeError::new(
-                                local,
-                                TypeErrorVariant::UndefinedConst(ind.clone()),
-                            ),
+                            TypeError::new(local, TypeErrorVariant::UndefinedConst(ind.clone())),
                         ))
                     }
                 };
@@ -739,15 +738,12 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 norm.normalize(global, local);
                 let (hd, mut args) = norm.strip_args();
                 // Ensure the type of `t` is of the same inductive type that we want to match on
-                if !hd.is_const(&ind) {
+                if !hd.is_const(ind) {
                     return Err((
                         t.meta.clone(),
                         TypeError::new(
                             local,
-                            TypeErrorVariant::NotOfExpectedInducitve(
-                                ind.clone(),
-                                t_type,
-                            ),
+                            TypeErrorVariant::NotOfExpectedInducitve(ind.clone(), t_type),
                         ),
                     ));
                 };
@@ -819,7 +815,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                     ));
                 }
 
-                for (arm, constructor) in arms.into_iter().zip(&body.constructors) {
+                for (arm, constructor) in arms.iter().zip(&body.constructors) {
                     if arm.params.len() != params.len() + constructor.arity.len() {
                         return Err((
                             arm.meta.clone(),
