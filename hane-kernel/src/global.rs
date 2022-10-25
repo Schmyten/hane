@@ -361,7 +361,7 @@ impl<M: Clone, B: Clone> Command<M, B> {
                                         &local,
                                         TypeErrorVariant::NotOfExpectedInducitve(
                                             body.name.clone(),
-                                            constructor.ttype.clone(),
+                                            constructor.ttype,
                                         ),
                                     )),
                                 ));

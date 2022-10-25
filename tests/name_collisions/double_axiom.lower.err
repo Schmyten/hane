@@ -1,0 +1,6 @@
+ --> tests/name_collisions/double_axiom.v:2:7
+  |
+2 | Axiom A : Prop.
+  |       ^
+  |
+  = A constant named `A` already exists

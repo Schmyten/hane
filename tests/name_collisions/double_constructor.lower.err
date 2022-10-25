@@ -1,0 +1,6 @@
+ --> tests/name_collisions/double_constructor.v:3:7
+  |
+3 |     | a : A.
+  |       ^
+  |
+  = A constant named `a` already exists

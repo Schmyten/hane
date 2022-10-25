@@ -1,6 +1,6 @@
 use crate::{
-    Binder, Command, CommandVariant, Expr, ExprVariant, IndBody, IndConstructor, Pattern, Sort,
-    Span, SpanError,
+    Binder, Command, CommandVariant, Expr, ExprVariant, Ident, IndBody, IndConstructor, Pattern,
+    Sort, Span, SpanError,
 };
 use pest::Parser;
 use pest_derive::Parser;
@@ -141,7 +141,7 @@ fn parse_expr_inner(pair: Pair) -> (Span, Expr) {
     let variant = match rule {
         Rule::expr_paren => return (span, parse_expr(pairs.next().unwrap())),
         Rule::sort => ExprVariant::Sort(parse_sort(pairs.next().unwrap())),
-        Rule::expr_var => ExprVariant::Var(parse_ident(pairs.next().unwrap())),
+        Rule::expr_var => ExprVariant::Var(parse_ident(pairs.next().unwrap()).name),
         Rule::expr_product => {
             debug_assert_rule!(pairs, keyword_forall); // Skip forall keyword
             let binders = parse_binders(pairs.next().unwrap()); // parse binders
@@ -188,9 +188,12 @@ fn parse_expr_inner(pair: Pair) -> (Span, Expr) {
     )
 }
 
-fn parse_ident(pair: Pair) -> String {
+fn parse_ident(pair: Pair) -> Ident {
     debug_assert_eq!(pair.as_rule(), Rule::ident);
-    pair.as_str().to_owned()
+    Ident {
+        span: Span::from_pest(pair.as_span()),
+        name: pair.as_str().to_owned(),
+    }
 }
 
 fn parse_sort(pair: Pair) -> Sort {
@@ -220,7 +223,7 @@ fn parse_binders(pair: Pair) -> Vec<Binder> {
             debug_assert_eq!(p.as_rule(), Rule::binder_base);
             let mut pairs = p.into_inner();
             Binder {
-                name: parse_ident(pairs.next().unwrap()),
+                ident: parse_ident(pairs.next().unwrap()),
                 ttype: parse_expr(pairs.next().unwrap()),
             }
         })
@@ -242,12 +245,10 @@ fn parse_match_arms(pair: Pair) -> Vec<(Pattern, Expr)> {
 
 fn parse_pattern(pair: Pair) -> Pattern {
     debug_assert_eq!(pair.as_rule(), Rule::pattern);
-    let span = Span::from_pest(pair.as_span());
     let mut pairs = pair.into_inner();
     let constructor = parse_ident(pairs.next().unwrap());
     let params = pairs.map(parse_ident).collect();
     Pattern {
-        span,
         constructor,
         params,
     }

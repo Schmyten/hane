@@ -1,0 +1,6 @@
+ --> tests/name_collisions/double_ind.v:2:11
+  |
+2 | Inductive A : Prop :=.
+  |           ^
+  |
+  = A constant named `A` already exists

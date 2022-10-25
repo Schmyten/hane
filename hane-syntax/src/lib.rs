@@ -38,20 +38,33 @@ impl Span {
     }
 }
 
+#[derive(Clone)]
+pub struct Ident {
+    pub span: Span,
+    pub name: String,
+}
+
+impl Eq for Ident {}
+impl PartialEq for Ident {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
 pub struct Command {
     pub span: Span,
     pub variant: CommandVariant,
 }
 
 pub enum CommandVariant {
-    Definition(String, Expr, Expr),
-    Axiom(String, Expr),
+    Definition(Ident, Expr, Expr),
+    Axiom(Ident, Expr),
     Inductive(Vec<IndBody>),
 }
 
 /// A single type in a mutually defined inductive type set
 pub struct IndBody {
-    pub name: String,
+    pub name: Ident,
     pub params: Vec<Binder>,
     pub ttype: Expr,
     pub constructors: Vec<IndConstructor>,
@@ -59,7 +72,7 @@ pub struct IndBody {
 
 /// A single constructor of an inductive type
 pub struct IndConstructor {
-    pub name: String,
+    pub name: Ident,
     pub ttype: Expr,
 }
 
@@ -84,14 +97,13 @@ impl PartialEq for Expr {
 
 #[derive(PartialEq, Eq)]
 pub struct Binder {
-    pub name: String,
+    pub ident: Ident,
     pub ttype: Expr,
 }
 
 pub struct Pattern {
-    span: Span,
-    constructor: String,
-    params: Vec<String>,
+    constructor: Ident,
+    params: Vec<Ident>,
 }
 
 impl Eq for Pattern {}
@@ -108,8 +120,8 @@ pub enum ExprVariant {
     App(Expr, Expr),
     Product(Vec<Binder>, Expr),
     Abstract(Vec<Binder>, Expr),
-    Bind(String, Expr, Expr, Expr),
-    Match(Expr, String, Pattern, Expr, Vec<(Pattern, Expr)>),
+    Bind(Ident, Expr, Expr, Expr),
+    Match(Expr, Ident, Pattern, Expr, Vec<(Pattern, Expr)>),
 }
 
 pub struct SpanError<E> {
@@ -139,6 +151,26 @@ impl Span {
             writeln!(f, "{0: >len$} |", "")?;
             write!(f, "{0: >len$} = ", "")?;
         } else {
+            let len = format!("{}", self.end.line).len();
+            writeln!(
+                f,
+                "{0: >len$}--> {1}:{2}:{3}",
+                "", path, self.start.line, self.start.col
+            )?;
+            writeln!(f, "{0: >len$} |", "")?;
+            let mut sep = "/";
+            for (i, line) in input
+                .lines()
+                .enumerate()
+                .take(self.end.line)
+                .skip(self.start.line - 1)
+            {
+                writeln!(f, "{0} | {sep} {line}", i + 1)?;
+                sep = "|";
+            }
+            writeln!(f, "{0: >len$} | |_{0:_>1$}^", "", self.end.col)?;
+            writeln!(f, "{0: >len$} |", "")?;
+            write!(f, "{0: >len$} = ", "")?;
         }
         Ok(())
     }

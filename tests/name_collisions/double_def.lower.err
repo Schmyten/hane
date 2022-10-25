@@ -1,0 +1,6 @@
+ --> tests/name_collisions/double_def.v:2:12
+  |
+2 | Definition A : Type{0} := Set.
+  |            ^
+  |
+  = A constant named `A` already exists
