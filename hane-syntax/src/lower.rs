@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::HashMap,
     fmt::{self, Display, Formatter},
 };
 
@@ -23,6 +23,9 @@ pub enum LoweringError {
     NameNotFree(String),
     UnknownVariable(String),
     ParamsMustMatch,
+    NotAConstructorOf(String, String, Vec<String>),
+    DupplicateConstructor(String),
+    MissingConstructors(Vec<String>),
 }
 
 impl Display for LoweringError {
@@ -34,19 +37,46 @@ impl Display for LoweringError {
                 f,
                 "Parameters must be syntactically the same on all mutually defined types"
             ),
+            LoweringError::NotAConstructorOf(ind, name, constructors) => {
+                write!(f, "{name} is not a constructor for {ind}.")?;
+                write!(f, " Constructors are: ")?;
+                let mut sep = "";
+                for constructor in constructors {
+                    write!(f, "{sep}{constructor}")?;
+                    sep = ", ";
+                }
+                Ok(())
+            }
+            LoweringError::DupplicateConstructor(name) => {
+                write!(f, "The constructor {name} was previously covered")
+            }
+            LoweringError::MissingConstructors(constructors) => {
+                write!(f, "Missing the constructors: ")?;
+                let mut sep = "";
+                for constructor in constructors {
+                    write!(f, "{sep}{constructor}")?;
+                    sep = ", ";
+                }
+                Ok(())
+            }
         }
     }
+}
+
+pub enum LoweringEntry {
+    Definition,
+    Inductive(Vec<String>),
 }
 
 impl Command {
     pub fn lower(
         self,
-        global: &mut HashSet<String>,
+        global: &mut HashMap<String, LoweringEntry>,
     ) -> Result<lowered::Command, SpanError<LoweringError>> {
         let mut names = Stack::new();
         let variant = match self.variant {
             CommandVariant::Definition(ident, ttype, value) => {
-                if global.contains(&ident.name) {
+                if global.contains_key(&ident.name) {
                     return Err(SpanError {
                         span: ident.span,
                         err: LoweringError::NameNotFree(ident.name),
@@ -54,18 +84,18 @@ impl Command {
                 }
                 let ttype = ttype.lower(global, &mut names)?;
                 let value = value.lower(global, &mut names)?;
-                global.insert(ident.name.clone());
+                global.insert(ident.name.clone(), LoweringEntry::Definition);
                 lowered::CommandVariant::Definition(ident.name, ttype, value)
             }
             CommandVariant::Axiom(ident, ttype) => {
-                if global.contains(&ident.name) {
+                if global.contains_key(&ident.name) {
                     return Err(SpanError {
                         span: ident.span,
                         err: LoweringError::NameNotFree(ident.name),
                     });
                 }
                 let ttype = ttype.lower(global, &mut names)?;
-                global.insert(ident.name.clone());
+                global.insert(ident.name.clone(), LoweringEntry::Definition);
                 lowered::CommandVariant::Axiom(ident.name, ttype)
             }
             CommandVariant::Inductive(mut bodies) => {
@@ -115,7 +145,18 @@ impl Command {
 
                 // With the types sorts lowered we can put the type names into the global name set as they are needed to handle the constructors
                 for body in &bodies {
-                    if !global.insert(body.name.name.clone()) {
+                    let constructors = body
+                        .constructors
+                        .iter()
+                        .map(|constructor| constructor.name.name.clone())
+                        .collect();
+                    if global
+                        .insert(
+                            body.name.name.clone(),
+                            LoweringEntry::Inductive(constructors),
+                        )
+                        .is_some()
+                    {
                         return Err(SpanError {
                             span: body.name.span.clone(),
                             err: LoweringError::NameNotFree(body.name.name.clone()),
@@ -156,7 +197,8 @@ impl Command {
                     .zip(cspans)
                     .try_for_each(|(constructor, span)| {
                         global
-                            .insert(constructor.name.clone())
+                            .insert(constructor.name.clone(), LoweringEntry::Definition)
+                            .is_none()
                             .then_some(())
                             .ok_or_else(|| SpanError {
                                 span,
@@ -176,7 +218,7 @@ impl Command {
 impl Binder {
     pub fn lower(
         self,
-        global: &HashSet<String>,
+        global: &HashMap<String, LoweringEntry>,
         names: &mut Stack<Ident>,
     ) -> Result<lowered::Binder, SpanError<LoweringError>> {
         let ttype = self.ttype.lower(global, names)?;
@@ -190,7 +232,7 @@ impl Binder {
 impl Expr {
     pub fn lower(
         self,
-        global: &HashSet<String>,
+        global: &HashMap<String, LoweringEntry>,
         names: &mut Stack<Ident>,
     ) -> Result<lowered::Term, SpanError<LoweringError>> {
         let variant = match *self.variant {
@@ -198,7 +240,7 @@ impl Expr {
             ExprVariant::Var(x) => {
                 if let Some((i, _)) = names.iter().enumerate().find(|(_, y)| x == y.name) {
                     lowered::TermVariant::Var(i)
-                } else if global.contains(&x) {
+                } else if global.contains_key(&x) {
                     lowered::TermVariant::Const(x)
                 } else {
                     return Err(SpanError {
@@ -257,13 +299,17 @@ impl Expr {
             }
             ExprVariant::Match(t, mut name, pat, ret, arms) => {
                 let t = t.lower(global, names)?;
-                let ret = {
-                    if !global.contains(&pat.constructor.name) {
+                let constructors = match global.get(&pat.constructor.name) {
+                    Some(LoweringEntry::Inductive(constructors)) => constructors,
+                    Some(_) => panic!(),
+                    None => {
                         return Err(SpanError {
                             span: pat.constructor.span.clone(),
                             err: LoweringError::UnknownVariable(pat.constructor.name),
-                        });
+                        })
                     }
+                };
+                let ret = {
                     let mut names = names.slot();
                     names.extend(pat.params);
                     let body = {
@@ -280,27 +326,73 @@ impl Expr {
                         body,
                     }
                 };
-                let arms = arms
-                    .into_iter()
-                    .map(|(pat, body)| {
-                        if !global.contains(&pat.constructor.name) {
+                let mut lowered_arms = vec![None; constructors.len()];
+                for (pat, body) in arms {
+                    if !global.contains_key(&pat.constructor.name) {
+                        return Err(SpanError {
+                            span: pat.constructor.span.clone(),
+                            err: LoweringError::UnknownVariable(pat.constructor.name),
+                        });
+                    }
+
+                    let lowered_arm = if let Some((lowered_arm, _)) = lowered_arms
+                        .iter_mut()
+                        .zip(constructors)
+                        .find(|(_, name)| **name == pat.constructor.name)
+                    {
+                        if lowered_arm.is_some() {
                             return Err(SpanError {
-                                span: pat.constructor.span.clone(),
-                                err: LoweringError::UnknownVariable(pat.constructor.name),
+                                span: pat.constructor.span,
+                                err: LoweringError::DupplicateConstructor(
+                                    pat.constructor.name.clone(),
+                                ),
                             });
                         }
-                        let mut names = names.slot();
-                        names.extend(pat.params);
-                        let body = body.lower(global, &mut names)?;
-                        let params = names.pop().rev().collect();
-                        Ok(lowered::MatchArm {
-                            meta: pat.constructor.span,
-                            constructor: pat.constructor.name,
-                            params,
-                            body,
-                        })
+                        lowered_arm
+                    } else {
+                        return Err(SpanError {
+                            span: pat.constructor.span.clone(),
+                            err: LoweringError::NotAConstructorOf(
+                                ret.constructor,
+                                pat.constructor.name,
+                                constructors.clone(),
+                            ),
+                        });
+                    };
+
+                    let mut names = names.slot();
+                    names.extend(pat.params);
+                    let body = body.lower(global, &mut names)?;
+                    let params = names.pop().rev().collect();
+                    let arm = lowered::MatchArm {
+                        meta: pat.constructor.span,
+                        constructor: pat.constructor.name,
+                        params,
+                        body,
+                    };
+
+                    *lowered_arm = Some(arm)
+                }
+
+                let mut missed = Vec::new();
+                let arms = lowered_arms
+                    .into_iter()
+                    .zip(constructors)
+                    .filter_map(|(arm, constructor)| {
+                        if arm.is_none() {
+                            missed.push(constructor.clone());
+                        }
+                        arm
                     })
-                    .collect::<Result<_, SpanError<LoweringError>>>()?;
+                    .collect();
+
+                if !missed.is_empty() {
+                    return Err(SpanError {
+                        span: self.span,
+                        err: LoweringError::MissingConstructors(missed)
+                    })
+                }
+
                 lowered::TermVariant::Match(t, name, ret, arms)
             }
         };
