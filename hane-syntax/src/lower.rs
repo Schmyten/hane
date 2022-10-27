@@ -394,6 +394,7 @@ impl Expr {
 
                 lowered::TermVariant::Match(t, name, ind, ret, arms)
             }
+            ExprVariant::Fix(_, _) => todo!(),
         };
         Ok(lowered::Term {
             meta: self.span,

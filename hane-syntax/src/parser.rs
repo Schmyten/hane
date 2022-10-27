@@ -1,6 +1,6 @@
 use crate::{
     Binder, Command, CommandVariant, Expr, ExprVariant, Ident, IndBody, IndConstructor, Pattern,
-    Sort, Span, SpanError,
+    Sort, Span, SpanError, FixDecl,
 };
 use pest::Parser;
 use pest_derive::Parser;
@@ -177,6 +177,31 @@ fn parse_expr_inner(pair: Pair) -> (Span, Expr) {
             debug_assert_rule!(pairs, keyword_end);
             ExprVariant::Match(t, name, pattern, ret, arms)
         }
+        Rule::expr_fix => {
+            debug_assert_rule!(pairs, keyword_fix);
+            let single = parse_fix_decl(pairs.next().unwrap());
+            if let Some(pair) = pairs.next() {
+                debug_assert_eq!(pair.as_rule(), Rule::expr_fix_with);
+                let mut pairs = pair.into_inner();
+                let decls = std::iter::once(single)
+                    .chain(
+                        pairs
+                            .next()
+                            .unwrap()
+                            .into_inner()
+                            .skip(1)
+                            .step_by(2)
+                            .map(parse_fix_decl),
+                    )
+                    .collect();
+                debug_assert_rule!(pairs, keyword_for);
+                let sel = parse_ident(pairs.next().unwrap());
+                ExprVariant::Fix(decls, sel)
+            } else {
+                let sel = single.name.clone();
+                ExprVariant::Fix(vec![single], sel)
+            }
+        }
         r => unreachable!("{:?}", r),
     };
     (
@@ -252,4 +277,16 @@ fn parse_pattern(pair: Pair) -> Pattern {
         constructor,
         params,
     }
+}
+
+fn parse_fix_decl(pair : Pair) -> FixDecl {
+    debug_assert_eq!(pair.as_rule(), Rule::expr_fix_decl);
+    let mut pairs = pair.into_inner();
+    let name = parse_ident(pairs.next().unwrap());
+    let params = parse_binders(pairs.next().unwrap());
+    debug_assert_rule!(pairs, keyword_struct);
+    let anot = parse_ident(pairs.next().unwrap());
+    let ttype = parse_expr(pairs.next().unwrap());
+    let body = parse_expr(pairs.next().unwrap());
+    FixDecl { name, params, anot, ttype, body }
 }

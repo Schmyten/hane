@@ -114,6 +114,15 @@ impl PartialEq for Pattern {
 }
 
 #[derive(PartialEq, Eq)]
+pub struct FixDecl {
+    name: Ident,
+    params: Vec<Binder>,
+    anot: Ident,
+    ttype : Expr,
+    body: Expr,
+}
+
+#[derive(PartialEq, Eq)]
 pub enum ExprVariant {
     Sort(Sort),
     Var(String),
@@ -122,6 +131,7 @@ pub enum ExprVariant {
     Abstract(Vec<Binder>, Expr),
     Bind(Ident, Expr, Expr, Expr),
     Match(Expr, Ident, Pattern, Expr, Vec<(Pattern, Expr)>),
+    Fix(Vec<FixDecl>, Ident),
 }
 
 pub struct SpanError<E> {
