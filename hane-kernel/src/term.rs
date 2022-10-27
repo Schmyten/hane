@@ -205,7 +205,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
     }
 
     /// Attempts to remove the `n`th newest local variable from the context of the term
-    /// 
+    ///
     /// This function return `None` if the term contains `Var(n)`
     pub fn pop(&self, n: usize) -> Option<Self> {
         self.try_subst(|meta, x, push| match (n + push).cmp(&x) {
@@ -223,9 +223,9 @@ impl<M: Clone, B: Clone> Term<M, B> {
     }
 
     /// Replaces a range of local variables with the results of `vals` thought of as a slice of terms.
-    /// 
+    ///
     /// The range starts from the `n + len - 1`th newest and end with the `n`th newest  (included)
-    /// 
+    ///
     /// The context of results of `vals` should be the context of the term without that range of variables.
     pub fn subst_many<'a>(
         &'a self,
