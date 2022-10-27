@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::convert::Infallible;
 use std::fmt::{self, Display, Formatter};
 
 use crate::entry::{Binder, Entry, EntryRef};
@@ -99,116 +100,23 @@ impl<M, B> Display for Term<M, B> {
     }
 }
 
-impl<M: Clone, B: Clone> TermVariant<M, B> {
-    fn push_inner(&self, cut: usize, amount: usize) -> Self {
-        match self {
-            TermVariant::Sort(sort) => TermVariant::Sort(sort.clone()),
-            TermVariant::Var(n) => TermVariant::Var(if cut <= *n { *n + amount } else { *n }),
-            TermVariant::Const(name) => TermVariant::Const(name.to_owned()),
-            TermVariant::App(f, v) => {
-                TermVariant::App(f.push_inner(cut, amount), v.push_inner(cut, amount))
-            }
-            TermVariant::Product(x, x_tp, t) => TermVariant::Product(
-                x.clone(),
-                x_tp.push_inner(cut, amount),
-                t.push_inner(cut + 1, amount),
-            ),
-            TermVariant::Abstract(x, x_tp, t) => TermVariant::Abstract(
-                x.clone(),
-                x_tp.push_inner(cut, amount),
-                t.push_inner(cut + 1, amount),
-            ),
-            TermVariant::Bind(x, x_tp, x_val, t) => TermVariant::Bind(
-                x.clone(),
-                x_tp.push_inner(cut, amount),
-                x_val.push_inner(cut, amount),
-                t.push_inner(cut + 1, amount),
-            ),
-            TermVariant::Match(t, x, ret, arms) => TermVariant::Match(
-                t.push_inner(cut, amount),
-                x.clone(),
-                MatchArm {
-                    meta: ret.meta.clone(),
-                    constructor: ret.constructor.clone(),
-                    params: ret.params.clone(),
-                    body: ret.body.push_inner(cut + ret.params.len() + 1, amount),
-                },
-                arms.iter()
-                    .map(|arm| MatchArm {
-                        meta: arm.meta.clone(),
-                        constructor: arm.constructor.clone(),
-                        params: arm.params.clone(),
-                        body: arm.body.push_inner(cut + arm.params.len(), amount),
-                    })
-                    .collect(),
-            ),
-        }
-    }
-}
-
 impl<M: Clone, B: Clone> Term<M, B> {
     //TODO: Find a more descriptive name
     pub fn push(&self, amount: usize) -> Self {
-        self.push_inner(0, amount)
-    }
-
-    fn push_inner(&self, cut: usize, amount: usize) -> Self {
-        Term {
-            meta: self.meta.clone(),
-            variant: Box::new(self.variant.push_inner(cut, amount)),
-        }
+        self.subst(|meta, n, cut| {
+            let n = if cut <= n { n + amount } else { n };
+            Term {
+                meta: meta.clone(),
+                variant: Box::new(TermVariant::Var(n))
+            }
+        })
     }
 
     pub fn subst(&self, mut f: impl FnMut(&M, usize, usize) -> Self) -> Self {
-        self.subst_inner(0, &mut f)
-    }
-
-    fn subst_inner(&self, push: usize, f: &mut impl FnMut(&M, usize, usize) -> Self) -> Self {
-        let variant = match &*self.variant {
-            TermVariant::Sort(sort) => TermVariant::Sort(sort.clone()),
-            TermVariant::Var(n) => return f(&self.meta, *n, push),
-            TermVariant::Const(name) => TermVariant::Const(name.to_owned()),
-            TermVariant::App(t, v) => {
-                TermVariant::App(t.subst_inner(push, f), v.subst_inner(push, f))
-            }
-            TermVariant::Product(x, x_tp, t) => TermVariant::Product(
-                x.clone(),
-                x_tp.subst_inner(push, f),
-                t.subst_inner(push + 1, f),
-            ),
-            TermVariant::Abstract(x, x_tp, t) => TermVariant::Abstract(
-                x.clone(),
-                x_tp.subst_inner(push, f),
-                t.subst_inner(push + 1, f),
-            ),
-            TermVariant::Bind(x, x_tp, x_val, t) => TermVariant::Bind(
-                x.clone(),
-                x_tp.subst_inner(push, f),
-                x_val.subst_inner(push, f),
-                t.subst_inner(push + 1, f),
-            ),
-            TermVariant::Match(t, x, ret, arms) => TermVariant::Match(
-                t.subst_inner(push, f),
-                x.clone(),
-                MatchArm {
-                    meta: ret.meta.clone(),
-                    constructor: ret.constructor.clone(),
-                    params: ret.params.clone(),
-                    body: ret.body.subst_inner(push + ret.params.len() + 1, f),
-                },
-                arms.iter()
-                    .map(|arm| MatchArm {
-                        meta: arm.meta.clone(),
-                        constructor: arm.constructor.clone(),
-                        params: arm.params.clone(),
-                        body: arm.body.subst_inner(push + arm.params.len(), f),
-                    })
-                    .collect(),
-            ),
-        };
-        Term {
-            meta: self.meta.clone(),
-            variant: Box::new(variant),
+        let res = self.try_subst::<Infallible>(|meta, x, push| Ok(f(meta, x, push)));
+        match res {
+            Ok(t) => t,
+            Err(i) => match i {},
         }
     }
 
