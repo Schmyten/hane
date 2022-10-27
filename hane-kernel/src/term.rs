@@ -102,16 +102,19 @@ impl<M, B> Display for Term<M, B> {
 
 impl<M: Clone, B: Clone> Term<M, B> {
     //TODO: Find a more descriptive name
+    /// Changes the context of the term to include `amount` new local variables.
     pub fn push(&self, amount: usize) -> Self {
         self.subst(|meta, n, cut| {
             let n = if cut <= n { n + amount } else { n };
             Term {
                 meta: meta.clone(),
-                variant: Box::new(TermVariant::Var(n))
+                variant: Box::new(TermVariant::Var(n)),
             }
         })
     }
 
+    /// Replaces all occurrences of `Var(n)` with the result of `f(meta, n, push)`
+    /// where `push` is the amount of local binders passed to find the variable.
     pub fn subst(&self, mut f: impl FnMut(&M, usize, usize) -> Self) -> Self {
         let res = self.try_subst::<Infallible>(|meta, x, push| Ok(f(meta, x, push)));
         match res {
@@ -120,6 +123,10 @@ impl<M: Clone, B: Clone> Term<M, B> {
         }
     }
 
+    /// Attempts to replace all occurrences of `Var(n)` with the result of `f(meta, n, push)`
+    /// where `push` is the amount of local binders passed to find the variable.
+    ///
+    /// This function returns an error if any of the replacements fails.
     pub fn try_subst<E>(
         &self,
         mut f: impl FnMut(&M, usize, usize) -> Result<Self, E>,
@@ -182,6 +189,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
         })
     }
 
+    /// Replace the `n`th newest local variable with `val`, as well as removing that variable from the context of the term.
     pub fn subst_single(&self, n: usize, val: &Self) -> Self {
         self.subst(|meta, x, push| match (n + push).cmp(&x) {
             Ordering::Less => Term {
@@ -196,6 +204,9 @@ impl<M: Clone, B: Clone> Term<M, B> {
         })
     }
 
+    /// Attempts to remove the `n`th newest local variable from the context of the term
+    /// 
+    /// This function return `None` if the term contains `Var(n)`
     pub fn pop(&self, n: usize) -> Option<Self> {
         self.try_subst(|meta, x, push| match (n + push).cmp(&x) {
             Ordering::Less => Ok(Term {
@@ -211,6 +222,11 @@ impl<M: Clone, B: Clone> Term<M, B> {
         .ok()
     }
 
+    /// Replaces a range of local variables with the results of `vals` thought of as a slice of terms.
+    /// 
+    /// The range starts from the `n + len - 1`th newest and end with the `n`th newest  (included)
+    /// 
+    /// The context of results of `vals` should be the context of the term without that range of variables.
     pub fn subst_many<'a>(
         &'a self,
         n: usize,
