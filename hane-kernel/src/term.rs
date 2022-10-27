@@ -21,6 +21,7 @@ pub enum TermVariant<M, B> {
     Abstract(B, Term<M, B>, Term<M, B>),
     Bind(B, Term<M, B>, Term<M, B>, Term<M, B>),
     Match(Term<M, B>, B, String, MatchArm<M, B>, Vec<MatchArm<M, B>>),
+    Fix(Vec<FixDecl<M, B>>, usize),
 }
 
 #[derive(Clone)]
@@ -28,6 +29,15 @@ pub struct MatchArm<M, B> {
     pub meta: M,
     pub params: Vec<B>,
     pub body: Term<M, B>,
+}
+
+#[derive(Clone)]
+pub struct FixDecl<M, B> {
+    name: B,
+    params: Vec<Binder<M, B>>,
+    anot: usize,
+    ttype: Term<M, B>,
+    body: Term<M, B>,
 }
 
 impl<M, B> PartialEq for Term<M, B> {
@@ -84,6 +94,7 @@ impl<M, B> Display for TermVariant<M, B> {
                 }
                 write!(f, " end")
             }
+            TermVariant::Fix(_, _) => todo!(),
         }
     }
 }
@@ -136,6 +147,7 @@ impl<M: Clone, B: Clone> TermVariant<M, B> {
                     })
                     .collect(),
             ),
+            TermVariant::Fix(_, _) => todo!(),
         }
     }
 }
@@ -198,6 +210,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                     })
                     .collect(),
             ),
+            TermVariant::Fix(_, _) => todo!(),
         };
         Term {
             meta: self.meta.clone(),
@@ -259,6 +272,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                     })
                     .collect::<Result<_, E>>()?,
             ),
+            TermVariant::Fix(_, _) => todo!(),
         };
         Ok(Term {
             meta: self.meta.clone(),
@@ -453,6 +467,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                         arm.body.normalize(global, &mut local);
                     }
                 }
+                TermVariant::Fix(_, _) => todo!(),
             }
             break;
         }
@@ -483,6 +498,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                     arm.body.eta();
                 }
             }
+            TermVariant::Fix(_, _) => todo!(),
         }
 
         if let TermVariant::Abstract(_, _, body) = &*self.variant {
@@ -887,6 +903,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                         }
                     })
             }
+            TermVariant::Fix(_, _) => todo!(),
         })
     }
 }

@@ -152,6 +152,7 @@ pub fn write_term<M: Clone>(
             }
             write!(buf, " end")
         }
+        TermVariant::Fix(_, _) => todo!(),
     }
 }
 
