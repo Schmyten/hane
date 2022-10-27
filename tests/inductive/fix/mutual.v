@@ -1,6 +1,6 @@
 Inductive tree (A : Set) : Set :=
     | Node : forall (x : A) (ts : forest A), tree A
-    with forest (A : Set) :=
+    with forest (A : Set) : Set :=
     | Nil : forest A
     | Cons : forall (t : tree A) (ts : forest A), forest A.
 
