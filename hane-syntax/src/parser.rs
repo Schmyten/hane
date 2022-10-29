@@ -71,9 +71,10 @@ pub fn parse_command(pair: Pair) -> Command {
         Rule::command_definition => {
             debug_assert_rule!(pairs, keyword_definition);
             let name = parse_ident(pairs.next().unwrap());
+            let params = parse_binders(pairs.next().unwrap());
             let ttype = parse_expr(pairs.next().unwrap());
             let value = parse_expr(pairs.next().unwrap());
-            CommandVariant::Definition(name, ttype, value)
+            CommandVariant::Definition(name, params, ttype, value)
         }
         Rule::command_axiom => {
             debug_assert_rule!(pairs, keyword_axiom);

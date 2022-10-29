@@ -1,7 +1,7 @@
 commands = _{ SOI ~ command* ~ EOI }
 command = _{ command_definition | command_axiom | command_inductive }
 command_definition = {
-    keyword_definition ~ ident ~ ":" ~ expr ~ ":=" ~ expr ~ "."
+    keyword_definition ~ ident ~ binders ~ ":" ~ expr ~ ":=" ~ expr ~ "."
 }
 command_axiom = { keyword_axiom ~ ident ~ ":" ~ expr ~ "." }
 command_inductive = { keyword_inductive ~ inductive_body ~ (keyword_with ~ inductive_body)* ~ "." }
