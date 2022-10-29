@@ -215,12 +215,12 @@ fn parse_sort(pair: Pair) -> Sort {
 fn parse_binders(pair: Pair) -> Vec<Binder> {
     let rule = pair.as_rule();
     debug_assert!(
-        rule == Rule::binders_opt || rule == Rule::binders,
+        rule == Rule::binders || rule == Rule::open_binders,
         "{rule:?}"
     );
     pair.into_inner()
         .map(|p| {
-            debug_assert_eq!(p.as_rule(), Rule::binder_base);
+            debug_assert_eq!(p.as_rule(), Rule::open_binder);
             let mut pairs = p.into_inner();
             Binder {
                 ident: parse_ident(pairs.next().unwrap()),
