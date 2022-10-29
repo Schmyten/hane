@@ -33,11 +33,11 @@ pub struct MatchArm<M, B> {
 
 #[derive(Clone)]
 pub struct FixDecl<M, B> {
-    name: B,
-    params: Vec<Binder<M, B>>,
-    anot: usize,
-    ttype: Term<M, B>,
-    body: Term<M, B>,
+    pub name: B,
+    pub params: Vec<Binder<M, B>>,
+    pub anot: usize,
+    pub ttype: Term<M, B>,
+    pub body: Term<M, B>,
 }
 
 impl<M, B> PartialEq for Term<M, B> {
@@ -94,7 +94,20 @@ impl<M, B> Display for TermVariant<M, B> {
                 }
                 write!(f, " end")
             }
-            TermVariant::Fix(_, _) => todo!(),
+            TermVariant::Fix(decls, sel) => {
+                let mut sep = "fix";
+                for decl in decls {
+                    write!(f, "{sep}[")?;
+                    sep = " with";
+                    let mut sep = "";
+                    for param in &decl.params {
+                        write!(f, "{sep}{}", param.ttype)?;
+                        sep = ", ";
+                    }
+                    write!(f, "]{{struct {}}} : {} := {}", decl.anot, decl.ttype, decl.body)?;
+                }
+                write!(f, " for {sel}")
+            },
         }
     }
 }

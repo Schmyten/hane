@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{Binder, Command, CommandVariant, Expr, ExprVariant, Ident, SpanError};
-use hane_kernel::{Sort, Stack};
+use hane_kernel::{stack::StackSlot, Sort, Stack};
 
 pub mod lowered {
     use crate::{Ident, Span};
@@ -17,6 +17,7 @@ pub mod lowered {
     pub type Term = hane_kernel::Term<Span, Ident>;
     pub type TermVariant = hane_kernel::TermVariant<Span, Ident>;
     pub type MatchArm = hane_kernel::term::MatchArm<Span, Ident>;
+    pub type FixDecl = hane_kernel::term::FixDecl<Span, Ident>;
 }
 
 pub enum LoweringError {
@@ -119,13 +120,11 @@ impl Command {
                     })?;
 
                 // Next we lower all the parameters and push then into our local name scope
-                let mut lowered_params = Vec::with_capacity(params.len());
                 let mut names = names.slot();
-                for param in params {
-                    let name = param.ident.clone();
-                    lowered_params.push(param.lower(global, &mut names)?);
-                    names.push_onto(name);
-                }
+                let params = params
+                    .into_iter()
+                    .map(|binder| binder.lower(global, &mut names))
+                    .collect::<Result<_, _>>()?;
 
                 // Then we steal and lower all the arity sorts of the types
                 let body_types = bodies
@@ -205,7 +204,7 @@ impl Command {
                                 err: LoweringError::NameNotFree(constructor.name.clone()),
                             })
                     })?;
-                lowered::CommandVariant::Inductive(lowered_params, lowered_bodies)
+                lowered::CommandVariant::Inductive(params, lowered_bodies)
             }
         };
         Ok(lowered::Command {
@@ -219,9 +218,10 @@ impl Binder {
     pub fn lower(
         self,
         global: &HashMap<String, LoweringEntry>,
-        names: &mut Stack<Ident>,
+        names: &mut StackSlot<Ident>,
     ) -> Result<lowered::Binder, SpanError<LoweringError>> {
         let ttype = self.ttype.lower(global, names)?;
+        names.push_onto(self.ident.clone());
         Ok(lowered::Binder {
             x: self.ident,
             ttype,
@@ -394,7 +394,25 @@ impl Expr {
 
                 lowered::TermVariant::Match(t, name, ind, ret, arms)
             }
-            ExprVariant::Fix(_, _) => todo!(),
+            ExprVariant::Fix(decls, sel) => {
+                let sel = if let Some((sel, _)) = decls
+                    .iter()
+                    .enumerate()
+                    .rev()
+                    .find(|(_, decl)| decl.name == sel)
+                {
+                    sel
+                } else {
+                    panic!()
+                };
+                let mut names = names.slot();
+                names.extend(decls.iter().map(|decl| decl.name.to_owned()));
+                let decls = decls
+                    .into_iter()
+                    .map(|decl| decl.lower(global, &mut names))
+                    .collect::<Result<_, _>>()?;
+                lowered::TermVariant::Fix(decls, sel)
+            }
         };
         Ok(lowered::Term {
             meta: self.span,
@@ -410,5 +428,36 @@ impl crate::Sort {
             crate::Sort::Set => Sort::Set,
             crate::Sort::Type(n) => Sort::Type(n),
         }
+    }
+}
+
+impl crate::FixDecl {
+    pub fn lower(
+        self,
+        global: &HashMap<String, LoweringEntry>,
+        names: &mut Stack<Ident>,
+    ) -> Result<lowered::FixDecl, SpanError<LoweringError>> {
+        let mut names = names.slot();
+        Ok(lowered::FixDecl {
+            name: self.name,
+            anot: if let Some((anot, _)) = self
+                .params
+                .iter()
+                .enumerate()
+                .rev()
+                .find(|(_, binder)| binder.ident == self.anot)
+            {
+                anot
+            } else {
+                panic!()
+            },
+            params: self
+                .params
+                .into_iter()
+                .map(|binder| binder.lower(global, &mut names))
+                .collect::<Result<_, _>>()?,
+            ttype: self.ttype.lower(global, &mut names)?,
+            body: self.body.lower(global, &mut names)?,
+        })
     }
 }
