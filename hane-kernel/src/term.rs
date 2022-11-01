@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::convert::Infallible;
 use std::fmt::{self, Display, Formatter};
 
 use crate::entry::{Binder, Entry, EntryRef};
@@ -118,119 +119,33 @@ impl<M, B> Display for Term<M, B> {
     }
 }
 
-impl<M: Clone, B: Clone> TermVariant<M, B> {
-    fn push_inner(&self, cut: usize, amount: usize) -> Self {
-        match self {
-            TermVariant::Sort(sort) => TermVariant::Sort(sort.clone()),
-            TermVariant::Var(n) => TermVariant::Var(if cut <= *n { *n + amount } else { *n }),
-            TermVariant::Const(name) => TermVariant::Const(name.to_owned()),
-            TermVariant::App(f, v) => {
-                TermVariant::App(f.push_inner(cut, amount), v.push_inner(cut, amount))
-            }
-            TermVariant::Product(x, x_tp, t) => TermVariant::Product(
-                x.clone(),
-                x_tp.push_inner(cut, amount),
-                t.push_inner(cut + 1, amount),
-            ),
-            TermVariant::Abstract(x, x_tp, t) => TermVariant::Abstract(
-                x.clone(),
-                x_tp.push_inner(cut, amount),
-                t.push_inner(cut + 1, amount),
-            ),
-            TermVariant::Bind(x, x_tp, x_val, t) => TermVariant::Bind(
-                x.clone(),
-                x_tp.push_inner(cut, amount),
-                x_val.push_inner(cut, amount),
-                t.push_inner(cut + 1, amount),
-            ),
-            TermVariant::Match(t, x, ind, ret, arms) => TermVariant::Match(
-                t.push_inner(cut, amount),
-                x.clone(),
-                ind.clone(),
-                MatchArm {
-                    meta: ret.meta.clone(),
-                    params: ret.params.clone(),
-                    body: ret.body.push_inner(cut + ret.params.len() + 1, amount),
-                },
-                arms.iter()
-                    .map(|arm| MatchArm {
-                        meta: arm.meta.clone(),
-                        params: arm.params.clone(),
-                        body: arm.body.push_inner(cut + arm.params.len(), amount),
-                    })
-                    .collect(),
-            ),
-            TermVariant::Fix(_, _) => todo!(),
-        }
-    }
-}
-
 impl<M: Clone, B: Clone> Term<M, B> {
     //TODO: Find a more descriptive name
+    /// Changes the context of the term to include `amount` new local variables.
     pub fn push(&self, amount: usize) -> Self {
-        self.push_inner(0, amount)
-    }
-
-    fn push_inner(&self, cut: usize, amount: usize) -> Self {
-        Term {
-            meta: self.meta.clone(),
-            variant: Box::new(self.variant.push_inner(cut, amount)),
-        }
-    }
-
-    pub fn subst(&self, mut f: impl FnMut(&M, usize, usize) -> Self) -> Self {
-        self.subst_inner(0, &mut f)
-    }
-
-    fn subst_inner(&self, push: usize, f: &mut impl FnMut(&M, usize, usize) -> Self) -> Self {
-        let variant = match &*self.variant {
-            TermVariant::Sort(sort) => TermVariant::Sort(sort.clone()),
-            TermVariant::Var(n) => return f(&self.meta, *n, push),
-            TermVariant::Const(name) => TermVariant::Const(name.to_owned()),
-            TermVariant::App(t, v) => {
-                TermVariant::App(t.subst_inner(push, f), v.subst_inner(push, f))
+        self.subst(|meta, n, cut| {
+            let n = if cut <= n { n + amount } else { n };
+            Term {
+                meta: meta.clone(),
+                variant: Box::new(TermVariant::Var(n)),
             }
-            TermVariant::Product(x, x_tp, t) => TermVariant::Product(
-                x.clone(),
-                x_tp.subst_inner(push, f),
-                t.subst_inner(push + 1, f),
-            ),
-            TermVariant::Abstract(x, x_tp, t) => TermVariant::Abstract(
-                x.clone(),
-                x_tp.subst_inner(push, f),
-                t.subst_inner(push + 1, f),
-            ),
-            TermVariant::Bind(x, x_tp, x_val, t) => TermVariant::Bind(
-                x.clone(),
-                x_tp.subst_inner(push, f),
-                x_val.subst_inner(push, f),
-                t.subst_inner(push + 1, f),
-            ),
-            TermVariant::Match(t, x, ind, ret, arms) => TermVariant::Match(
-                t.subst_inner(push, f),
-                x.clone(),
-                ind.clone(),
-                MatchArm {
-                    meta: ret.meta.clone(),
-                    params: ret.params.clone(),
-                    body: ret.body.subst_inner(push + ret.params.len() + 1, f),
-                },
-                arms.iter()
-                    .map(|arm| MatchArm {
-                        meta: arm.meta.clone(),
-                        params: arm.params.clone(),
-                        body: arm.body.subst_inner(push + arm.params.len(), f),
-                    })
-                    .collect(),
-            ),
-            TermVariant::Fix(_, _) => todo!(),
-        };
-        Term {
-            meta: self.meta.clone(),
-            variant: Box::new(variant),
+        })
+    }
+
+    /// Replaces all occurrences of `Var(n)` with the result of `f(meta, n, push)`
+    /// where `push` is the amount of local binders passed to find the variable.
+    pub fn subst(&self, mut f: impl FnMut(&M, usize, usize) -> Self) -> Self {
+        let res = self.try_subst::<Infallible>(|meta, x, push| Ok(f(meta, x, push)));
+        match res {
+            Ok(t) => t,
+            Err(i) => match i {},
         }
     }
 
+    /// Attempts to replace all occurrences of `Var(n)` with the result of `f(meta, n, push)`
+    /// where `push` is the amount of local binders passed to find the variable.
+    ///
+    /// This function returns an error if any of the replacements fails.
     pub fn try_subst<E>(
         &self,
         mut f: impl FnMut(&M, usize, usize) -> Result<Self, E>,
@@ -293,6 +208,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
         })
     }
 
+    /// Replace the `n`th newest local variable with `val`, as well as removing that variable from the context of the term.
     pub fn subst_single(&self, n: usize, val: &Self) -> Self {
         self.subst(|meta, x, push| match (n + push).cmp(&x) {
             Ordering::Less => Term {
@@ -307,6 +223,9 @@ impl<M: Clone, B: Clone> Term<M, B> {
         })
     }
 
+    /// Attempts to remove the `n`th newest local variable from the context of the term
+    ///
+    /// This function return `None` if the term contains `Var(n)`
     pub fn pop(&self, n: usize) -> Option<Self> {
         self.try_subst(|meta, x, push| match (n + push).cmp(&x) {
             Ordering::Less => Ok(Term {
@@ -322,6 +241,11 @@ impl<M: Clone, B: Clone> Term<M, B> {
         .ok()
     }
 
+    /// Replaces a range of local variables with the results of `vals` thought of as a slice of terms.
+    ///
+    /// The range starts from the `n + len - 1`th newest and end with the `n`th newest  (included)
+    ///
+    /// The context of results of `vals` should be the context of the term without that range of variables.
     pub fn subst_many<'a>(
         &'a self,
         n: usize,
