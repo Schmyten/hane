@@ -6,6 +6,13 @@ pub struct Binder<M, B> {
     pub ttype: Term<M, B>,
 }
 
+impl<M, B> Eq for Binder<M, B> {}
+impl<M, B> PartialEq for Binder<M, B> {
+    fn eq(&self, other: &Self) -> bool {
+        self.ttype == other.ttype
+    }
+}
+
 #[derive(Clone)]
 pub struct Entry<M, B> {
     pub x: B,
@@ -52,5 +59,11 @@ impl<'a, M, B> EntryRef<'a, M, B> {
 impl<M, B> From<Binder<M, B>> for Entry<M, B> {
     fn from(binder: Binder<M, B>) -> Self {
         Entry::new(binder.x, binder.ttype)
+    }
+}
+
+impl<M, B> From<Entry<M, B>> for Binder<M, B> {
+    fn from(entry: Entry<M, B>) -> Self {
+        Binder { x: entry.x, ttype: entry.ttype }
     }
 }

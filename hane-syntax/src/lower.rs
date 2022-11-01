@@ -263,9 +263,12 @@ impl Expr {
                 let t = t.lower(global, &mut names)?;
                 let mut iter = names.pop().zip(type_stack.into_iter().rev());
 
-                let make_term = |inner, (name, ttype)| lowered::Term {
+                let make_term = |inner, (x, ttype)| lowered::Term {
                     meta: self.span.clone(),
-                    variant: Box::new(lowered::TermVariant::Product(name, ttype, inner)),
+                    variant: Box::new(lowered::TermVariant::Product(
+                        lowered::Binder { x, ttype },
+                        inner,
+                    )),
                 };
                 let inner = iter.next().unwrap();
                 return Ok(iter.fold(make_term(t, inner), make_term));
@@ -281,9 +284,12 @@ impl Expr {
                 let t = t.lower(global, &mut names)?;
                 let mut iter = names.pop().zip(type_stack.into_iter().rev());
 
-                let make_term = |inner, (name, ttype)| lowered::Term {
+                let make_term = |inner, (x, ttype)| lowered::Term {
                     meta: self.span.clone(),
-                    variant: Box::new(lowered::TermVariant::Abstract(name, ttype, inner)),
+                    variant: Box::new(lowered::TermVariant::Abstract(
+                        lowered::Binder { x, ttype },
+                        inner,
+                    )),
                 };
                 let inner = iter.next().unwrap();
                 return Ok(iter.fold(make_term(t, inner), make_term));
@@ -461,6 +467,12 @@ impl crate::FixDecl {
         names.extend(fnames.drain(..));
         let body = self.body.lower(global, &mut names)?;
         fnames.extend(names.pop().rev());
-        Ok(lowered::FixDecl { name, anot, params, ttype, body })
+        Ok(lowered::FixDecl {
+            name,
+            anot,
+            params,
+            ttype,
+            body,
+        })
     }
 }

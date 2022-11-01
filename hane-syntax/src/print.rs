@@ -54,30 +54,30 @@ pub fn write_term<M: Clone>(
             }
             Ok(())
         }
-        TermVariant::Product(x, x_tp, t) => {
-            let x = fresh(x, names);
+        TermVariant::Product(binder, body) => {
+            let x = fresh(&binder.x, names);
             if level < 200 {
                 write!(buf, "(")?;
             }
             write!(buf, "forall {} : ", x.name)?;
-            write_term(buf, x_tp, global, names, 200)?;
+            write_term(buf, &binder.ttype, global, names, 200)?;
             write!(buf, ", ")?;
             {
                 let mut names = names.push(x);
-                write_term(buf, t, global, &mut names, 200)?
+                write_term(buf, body, global, &mut names, 200)?
             }
             if level < 200 {
                 write!(buf, ")")?;
             }
             Ok(())
         }
-        TermVariant::Abstract(x, x_tp, t) => {
-            let x = fresh(x, names);
+        TermVariant::Abstract(binder, t) => {
+            let x = fresh(&binder.x, names);
             if level < 200 {
                 write!(buf, "(")?;
             }
             write!(buf, "fun {} : ", x.name)?;
-            write_term(buf, x_tp, global, names, 200)?;
+            write_term(buf, &binder.ttype, global, names, 200)?;
             write!(buf, " => ")?;
             {
                 let mut names = names.push(x);
