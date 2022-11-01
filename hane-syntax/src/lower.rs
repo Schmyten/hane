@@ -406,10 +406,10 @@ impl Expr {
                     panic!()
                 };
                 let mut names = names.slot();
-                names.extend(decls.iter().map(|decl| decl.name.to_owned()));
+                let mut fnames = decls.iter().map(|decl| decl.name.to_owned()).collect();
                 let decls = decls
                     .into_iter()
-                    .map(|decl| decl.lower(global, &mut names))
+                    .map(|decl| decl.lower(global, &mut names, &mut fnames))
                     .collect::<Result<_, _>>()?;
                 lowered::TermVariant::Fix(decls, sel)
             }
@@ -436,28 +436,31 @@ impl crate::FixDecl {
         self,
         global: &HashMap<String, LoweringEntry>,
         names: &mut Stack<Ident>,
+        fnames: &mut Vec<Ident>,
     ) -> Result<lowered::FixDecl, SpanError<LoweringError>> {
+        let name = self.name;
+        let anot = if let Some((anot, _)) = self
+            .params
+            .iter()
+            .enumerate()
+            .rev()
+            .find(|(_, binder)| binder.ident == self.anot)
+        {
+            anot
+        } else {
+            panic!()
+        };
         let mut names = names.slot();
-        Ok(lowered::FixDecl {
-            name: self.name,
-            anot: if let Some((anot, _)) = self
-                .params
-                .iter()
-                .enumerate()
-                .rev()
-                .find(|(_, binder)| binder.ident == self.anot)
-            {
-                anot
-            } else {
-                panic!()
-            },
-            params: self
-                .params
-                .into_iter()
-                .map(|binder| binder.lower(global, &mut names))
-                .collect::<Result<_, _>>()?,
-            ttype: self.ttype.lower(global, &mut names)?,
-            body: self.body.lower(global, &mut names)?,
-        })
+        let params = self
+            .params
+            .into_iter()
+            .map(|binder| binder.lower(global, &mut names))
+            .collect::<Result<_, _>>()?;
+        let ttype = self.ttype.lower(global, &mut names)?;
+        let mut names = names.slot();
+        names.extend(fnames.drain(..));
+        let body = self.body.lower(global, &mut names)?;
+        fnames.extend(names.pop().rev());
+        Ok(lowered::FixDecl { name, anot, params, ttype, body })
     }
 }
