@@ -849,7 +849,44 @@ impl<M: Clone, B: Clone> Term<M, B> {
                         }
                     })
             }
-            TermVariant::Fix(_, _) => todo!(),
+            TermVariant::Fix(decls, sel) => {
+                let mut decl_binders = decls
+                    .iter()
+                    .map(|decl| Binder {
+                        x: decl.name.clone(),
+                        ttype: decl.params.iter().rev().fold(
+                            decl.ttype.clone(),
+                            |ttype, binder| Term {
+                                meta: ttype.meta.clone(),
+                                variant: Box::new(TermVariant::Product(binder.clone(), ttype)),
+                            },
+                        ),
+                    })
+                    .collect::<Vec<_>>();
+
+                for decl_binder in &decl_binders {
+                    decl_binder
+                        .ttype
+                        .type_check(global, local)?
+                        .expect_sort(global, local)
+                        .map_err(|err| (decl_binder.ttype.meta.clone(), err))?;
+                }
+
+                for decl in decls {
+                    let mut local = local.slot();
+                    local.extend(decl.params.iter().cloned().map(Entry::from));
+                    local.extend(decl_binders.iter().enumerate().map(|(i, binder)| {
+                        Entry::new(binder.x.clone(), binder.ttype.push(decl.params.len() + i))
+                    }));
+                    let expected = decl.ttype.push(decls.len());
+                    let actual = decl.body.type_check(global, &mut local)?;
+                    actual
+                        .expect_subtype(&expected, global, &mut local)
+                        .map_err(|err| (decl.body.meta.clone(), err))?;
+                }
+
+                decl_binders.swap_remove(*sel).ttype
+            }
         })
     }
 }
