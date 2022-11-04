@@ -390,6 +390,20 @@ impl<M: Clone, B: Clone> Command<M, B> {
                         .collect::<Result<_, (M, CommandError<M, B>)>>()?;
                 }
 
+                for body in &ind_bodies {
+                    for constructor in &body.constructors {
+                        for arg in &constructor.args {
+                            arg.validate_consts(|name| {
+                                ind_bodies
+                                    .iter()
+                                    .any(|body| body.name != name)
+                                    .then_some(())
+                                    .ok_or(CommandError::ConstructorArgsContainsType)
+                            })?;
+                        }
+                    }
+                }
+
                 // With the constructors typechecked, we can now remove the new types, so that they can be properly instantiated as inductive types
                 global.env.truncate(global.env.len() - ind_bodies.len());
 

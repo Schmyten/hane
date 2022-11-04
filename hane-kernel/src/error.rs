@@ -2,6 +2,7 @@ use crate::{entry::Entry, Sort, Stack, Term};
 
 pub enum CommandError<M, B> {
     NameAlreadyExists(String),
+    ConstructorArgsContainsType,
     TypeError(TypeError<M, B>),
 }
 

@@ -189,6 +189,44 @@ impl<M: Clone, B: Clone> Term<M, B> {
         })
     }
 
+    pub fn validate_consts<E>(&self, mut f: impl FnMut(&str) -> Result<(), E>) -> Result<(), (M, E)> {
+        self.validate_consts_inner(&mut f)
+    }
+
+    fn validate_consts_inner<E>(
+        &self,
+        f: &mut impl FnMut(&str) -> Result<(), E>,
+    ) -> Result<(), (M, E)> {
+        match &*self.variant {
+            TermVariant::Sort(_) => Ok(()),
+            TermVariant::Var(_) => Ok(()),
+            TermVariant::Const(name) => f(name).map_err(|e| (self.meta.clone(), e)),
+            TermVariant::App(t1, t2) => {
+                t1.validate_consts_inner(f)?;
+                t2.validate_consts_inner(f)
+            }
+            TermVariant::Product(_, t1, t2) => {
+                t1.validate_consts_inner(f)?;
+                t2.validate_consts_inner(f)
+            }
+            TermVariant::Abstract(_, t1, t2) => {
+                t1.validate_consts_inner(f)?;
+                t2.validate_consts_inner(f)
+            }
+            TermVariant::Bind(_, t1, t2, t3) => {
+                t1.validate_consts_inner(f)?;
+                t2.validate_consts_inner(f)?;
+                t3.validate_consts_inner(f)
+            }
+            TermVariant::Match(t, _, ret, arms) => {
+                t.validate_consts_inner(f)?;
+                ret.body.validate_consts_inner(f)?;
+                arms.iter()
+                    .try_for_each(|arm| arm.body.validate_consts_inner(f))
+            }
+        }
+    }
+
     /// Replace the `n`th newest local variable with `val`, as well as removing that variable from the context of the term.
     pub fn subst_single(&self, n: usize, val: &Self) -> Self {
         self.subst(|meta, x, push| match (n + push).cmp(&x) {

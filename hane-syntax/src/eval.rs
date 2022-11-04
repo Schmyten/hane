@@ -67,6 +67,9 @@ impl Display for EvalError {
             CommandError::NameAlreadyExists(name) => {
                 write!(f, "The name `{name}` has already been defined")
             }
+            CommandError::ConstructorArgsContainsType => {
+                write!(f, "Types from the constructors type family is not allowed as arguments to the constructed type")
+            }
             CommandError::TypeError(err) => {
                 write_cause(err, &err.local, f)?;
                 writeln!(f)?;
