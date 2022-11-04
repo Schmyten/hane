@@ -71,9 +71,10 @@ pub fn parse_command(pair: Pair) -> Command {
         Rule::command_definition => {
             debug_assert_rule!(pairs, keyword_definition);
             let name = parse_ident(pairs.next().unwrap());
+            let params = parse_binders(pairs.next().unwrap());
             let ttype = parse_expr(pairs.next().unwrap());
             let value = parse_expr(pairs.next().unwrap());
-            CommandVariant::Definition(name, ttype, value)
+            CommandVariant::Definition(name, params, ttype, value)
         }
         Rule::command_axiom => {
             debug_assert_rule!(pairs, keyword_axiom);
@@ -215,12 +216,12 @@ fn parse_sort(pair: Pair) -> Sort {
 fn parse_binders(pair: Pair) -> Vec<Binder> {
     let rule = pair.as_rule();
     debug_assert!(
-        rule == Rule::binders_opt || rule == Rule::binders,
+        rule == Rule::binders || rule == Rule::open_binders,
         "{rule:?}"
     );
     pair.into_inner()
         .map(|p| {
-            debug_assert_eq!(p.as_rule(), Rule::binder_base);
+            debug_assert_eq!(p.as_rule(), Rule::open_binder);
             let mut pairs = p.into_inner();
             Binder {
                 ident: parse_ident(pairs.next().unwrap()),

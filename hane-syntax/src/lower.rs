@@ -45,15 +45,45 @@ impl Command {
     ) -> Result<lowered::Command, SpanError<LoweringError>> {
         let mut names = Stack::new();
         let variant = match self.variant {
-            CommandVariant::Definition(ident, ttype, value) => {
+            CommandVariant::Definition(ident, params, ttype, value) => {
                 if global.contains(&ident.name) {
                     return Err(SpanError {
                         span: ident.span,
                         err: LoweringError::NameNotFree(ident.name),
                     });
                 }
+                let mut names = names.slot();
+                let mut lowered_params = Vec::with_capacity(params.len());
+                for param in params {
+                    let name = param.ident.clone();
+                    lowered_params.push(param.lower(global, &mut names)?);
+                    names.push_onto(name);
+                }
                 let ttype = ttype.lower(global, &mut names)?;
                 let value = value.lower(global, &mut names)?;
+                let ttype = lowered_params
+                    .iter()
+                    .cloned()
+                    .rev()
+                    .fold(ttype, |ttype, binder| lowered::Term {
+                        meta: ttype.meta.clone(),
+                        variant: Box::new(lowered::TermVariant::Product(
+                            binder.x,
+                            binder.ttype,
+                            ttype,
+                        )),
+                    });
+                let value = lowered_params
+                    .into_iter()
+                    .rev()
+                    .fold(value, |value, binder| lowered::Term {
+                        meta: value.meta.clone(),
+                        variant: Box::new(lowered::TermVariant::Abstract(
+                            binder.x,
+                            binder.ttype,
+                            value,
+                        )),
+                    });
                 global.insert(ident.name.clone());
                 lowered::CommandVariant::Definition(ident.name, ttype, value)
             }
