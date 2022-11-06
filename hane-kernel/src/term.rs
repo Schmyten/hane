@@ -189,7 +189,10 @@ impl<M: Clone, B: Clone> Term<M, B> {
         })
     }
 
-    pub fn validate_consts<E>(&self, mut f: impl FnMut(&str) -> Result<(), E>) -> Result<(), (M, E)> {
+    pub fn validate_consts<E>(
+        &self,
+        mut f: impl FnMut(&str) -> Result<(), E>,
+    ) -> Result<(), (M, E)> {
         self.validate_consts_inner(&mut f)
     }
 
@@ -224,6 +227,42 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 arms.iter()
                     .try_for_each(|arm| arm.body.validate_consts_inner(f))
             }
+        }
+    }
+
+    pub fn strict_positivity(&self, mut f: impl FnMut(&str) -> bool) -> bool {
+        self.strict_positivity_inner(&mut f)
+    }
+
+    fn strict_positivity_inner(mut self: &Self, f: &mut impl FnMut(&str) -> bool) -> bool {
+        while let TermVariant::Product(_, input, body) = &*self.variant {
+            if !input
+                .validate_consts(|name| (!f(name)).then_some(()).ok_or(()))
+                .is_ok()
+            {
+                return false;
+            }
+            self = body;
+        }
+
+        if self.validate_consts(|name| (!f(name)).then_some(()).ok_or(())).is_ok() {
+            return true;
+        }
+
+        let (hd, args) = self.strip_args_ref();
+        let hd = if let TermVariant::Const(hd) = &*hd.variant {
+            hd
+        } else {
+            return false;
+        };
+
+        if f(hd) {
+            args.iter().all(|arg| {
+                arg.validate_consts(|name| (!f(name)).then_some(()).ok_or(()))
+                    .is_ok()
+            })
+        } else {
+            panic!()
         }
     }
 
@@ -543,6 +582,18 @@ impl<M: Clone, B: Clone> Term<M, B> {
     pub fn strip_args(mut self) -> (Self, Vec<Self>) {
         let mut args = Vec::new();
         while let TermVariant::App(fun, arg) = *self.variant {
+            args.push(arg);
+            self = fun
+        }
+        args.reverse();
+        (self, args)
+    }
+
+    /// Seperates terms of the form `forall (x1 : T1) .. (xn : Tn), t` into `([(x1 : T1), .. , (xn : Tn)], t)`.
+    /// If the input is not a product, it is returned unchanged.
+    pub fn strip_args_ref(mut self: &Self) -> (&Self, Vec<&Self>) {
+        let mut args = Vec::new();
+        while let TermVariant::App(fun, arg) = &*self.variant {
             args.push(arg);
             self = fun
         }

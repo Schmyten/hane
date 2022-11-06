@@ -392,11 +392,19 @@ impl<M: Clone, B: Clone> Command<M, B> {
 
                 for body in &ind_bodies {
                     for constructor in &body.constructors {
+                        for param in &constructor.arity {
+                            if !param.ttype.strict_positivity(|name| {
+                                ind_bodies.iter().any(|body| body.name == name)
+                            }) {
+                                panic!()
+                            }
+                        }
+
                         for arg in &constructor.args {
                             arg.validate_consts(|name| {
                                 ind_bodies
                                     .iter()
-                                    .any(|body| body.name != name)
+                                    .all(|body| body.name != name)
                                     .then_some(())
                                     .ok_or(CommandError::ConstructorArgsContainsType)
                             })?;
