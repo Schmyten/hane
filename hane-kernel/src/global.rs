@@ -415,8 +415,6 @@ impl<M: Clone, B: Clone> Command<M, B> {
                 // With the constructors typechecked, we can now remove the new types, so that they can be properly instantiated as inductive types
                 global.env.truncate(global.env.len() - ind_bodies.len());
 
-                //TODO: [Positivity Condition](https://coq.inria.fr/distrib/current/refman/language/core/inductive.html#positivity-condition)
-
                 global
                     .env
                     .push((self.meta, GEntry::Inductive(params, ind_bodies)));

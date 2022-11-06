@@ -230,22 +230,33 @@ impl<M: Clone, B: Clone> Term<M, B> {
         }
     }
 
-    pub fn strict_positivity(&self, global: &Global<M, B>, mut f: impl FnMut(&str) -> bool) -> bool {
+    pub fn strict_positivity(
+        &self,
+        global: &Global<M, B>,
+        mut f: impl FnMut(&str) -> bool,
+    ) -> bool {
         self.strict_positivity_inner(global, &mut f)
     }
 
-    fn strict_positivity_inner(mut self: &Self, global: &Global<M, B>, f: &mut impl FnMut(&str) -> bool) -> bool {
+    fn strict_positivity_inner(
+        mut self: &Self,
+        global: &Global<M, B>,
+        f: &mut impl FnMut(&str) -> bool,
+    ) -> bool {
         while let TermVariant::Product(_, input, body) = &*self.variant {
-            if !input
+            if input
                 .validate_consts(|name| (!f(name)).then_some(()).ok_or(()))
-                .is_ok()
+                .is_err()
             {
                 return false;
             }
             self = body;
         }
 
-        if self.validate_consts(|name| (!f(name)).then_some(()).ok_or(())).is_ok() {
+        if self
+            .validate_consts(|name| (!f(name)).then_some(()).ok_or(()))
+            .is_ok()
+        {
             return true;
         }
 
@@ -261,9 +272,12 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 arg.validate_consts(|name| (!f(name)).then_some(()).ok_or(()))
                     .is_ok()
             })
-        } else if let Some(GEntryRef::Inductive(_, params, bodies)) = global.get_entry(hd) {
-            if bodies.len() != 1 { return false }
-            let body = &bodies[1];
+        } else if let Some(GEntryRef::Inductive(_, _params, bodies)) = global.get_entry(hd) {
+            if bodies.len() != 1 {
+                return false;
+            }
+            let _body = &bodies[1];
+            //TODO: [Nested Positivity](https://coq.inria.fr/distrib/current/refman/language/core/inductive.html#nested-positivity)
             unimplemented!();
         } else {
             false
