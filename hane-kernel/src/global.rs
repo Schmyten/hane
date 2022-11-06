@@ -396,7 +396,10 @@ impl<M: Clone, B: Clone> Command<M, B> {
                             if !param.ttype.strict_positivity(global, |name| {
                                 ind_bodies.iter().any(|body| body.name == name)
                             }) {
-                                panic!()
+                                return Err((
+                                    constructor.arity_type.meta.clone(),
+                                    CommandError::ConstructorFailsPositivityCondition,
+                                ));
                             }
                         }
 
