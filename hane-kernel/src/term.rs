@@ -230,11 +230,11 @@ impl<M: Clone, B: Clone> Term<M, B> {
         }
     }
 
-    pub fn strict_positivity(&self, mut f: impl FnMut(&str) -> bool) -> bool {
-        self.strict_positivity_inner(&mut f)
+    pub fn strict_positivity(&self, global: &Global<M, B>, mut f: impl FnMut(&str) -> bool) -> bool {
+        self.strict_positivity_inner(global, &mut f)
     }
 
-    fn strict_positivity_inner(mut self: &Self, f: &mut impl FnMut(&str) -> bool) -> bool {
+    fn strict_positivity_inner(mut self: &Self, global: &Global<M, B>, f: &mut impl FnMut(&str) -> bool) -> bool {
         while let TermVariant::Product(_, input, body) = &*self.variant {
             if !input
                 .validate_consts(|name| (!f(name)).then_some(()).ok_or(()))
@@ -261,8 +261,12 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 arg.validate_consts(|name| (!f(name)).then_some(()).ok_or(()))
                     .is_ok()
             })
+        } else if let Some(GEntryRef::Inductive(_, params, bodies)) = global.get_entry(hd) {
+            if bodies.len() != 1 { return false }
+            let body = &bodies[1];
+            unimplemented!();
         } else {
-            panic!()
+            false
         }
     }
 

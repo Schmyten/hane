@@ -393,7 +393,7 @@ impl<M: Clone, B: Clone> Command<M, B> {
                 for body in &ind_bodies {
                     for constructor in &body.constructors {
                         for param in &constructor.arity {
-                            if !param.ttype.strict_positivity(|name| {
+                            if !param.ttype.strict_positivity(global, |name| {
                                 ind_bodies.iter().any(|body| body.name == name)
                             }) {
                                 panic!()
