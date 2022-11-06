@@ -189,6 +189,101 @@ impl<M: Clone, B: Clone> Term<M, B> {
         })
     }
 
+    pub fn validate_consts<E>(
+        &self,
+        mut f: impl FnMut(&str) -> Result<(), E>,
+    ) -> Result<(), (M, E)> {
+        self.validate_consts_inner(&mut f)
+    }
+
+    fn validate_consts_inner<E>(
+        &self,
+        f: &mut impl FnMut(&str) -> Result<(), E>,
+    ) -> Result<(), (M, E)> {
+        match &*self.variant {
+            TermVariant::Sort(_) => Ok(()),
+            TermVariant::Var(_) => Ok(()),
+            TermVariant::Const(name) => f(name).map_err(|e| (self.meta.clone(), e)),
+            TermVariant::App(t1, t2) => {
+                t1.validate_consts_inner(f)?;
+                t2.validate_consts_inner(f)
+            }
+            TermVariant::Product(_, t1, t2) => {
+                t1.validate_consts_inner(f)?;
+                t2.validate_consts_inner(f)
+            }
+            TermVariant::Abstract(_, t1, t2) => {
+                t1.validate_consts_inner(f)?;
+                t2.validate_consts_inner(f)
+            }
+            TermVariant::Bind(_, t1, t2, t3) => {
+                t1.validate_consts_inner(f)?;
+                t2.validate_consts_inner(f)?;
+                t3.validate_consts_inner(f)
+            }
+            TermVariant::Match(t, _, ret, arms) => {
+                t.validate_consts_inner(f)?;
+                ret.body.validate_consts_inner(f)?;
+                arms.iter()
+                    .try_for_each(|arm| arm.body.validate_consts_inner(f))
+            }
+        }
+    }
+
+    pub fn strict_positivity(
+        &self,
+        global: &Global<M, B>,
+        mut f: impl FnMut(&str) -> bool,
+    ) -> bool {
+        self.strict_positivity_inner(global, &mut f)
+    }
+
+    fn strict_positivity_inner(
+        mut self: &Self,
+        global: &Global<M, B>,
+        f: &mut impl FnMut(&str) -> bool,
+    ) -> bool {
+        while let TermVariant::Product(_, input, body) = &*self.variant {
+            if input
+                .validate_consts(|name| (!f(name)).then_some(()).ok_or(()))
+                .is_err()
+            {
+                return false;
+            }
+            self = body;
+        }
+
+        if self
+            .validate_consts(|name| (!f(name)).then_some(()).ok_or(()))
+            .is_ok()
+        {
+            return true;
+        }
+
+        let (hd, args) = self.strip_args_ref();
+        let hd = if let TermVariant::Const(hd) = &*hd.variant {
+            hd
+        } else {
+            return false;
+        };
+
+        if f(hd) {
+            args.iter().all(|arg| {
+                arg.validate_consts(|name| (!f(name)).then_some(()).ok_or(()))
+                    .is_ok()
+            })
+        } else if let Some(GEntryRef::Inductive(_, _params, bodies)) = global.get_entry(hd) {
+            if bodies.len() != 1 {
+                return false;
+            }
+            let _body = &bodies[1];
+            //TODO: [Nested Positivity](https://coq.inria.fr/distrib/current/refman/language/core/inductive.html#nested-positivity)
+            unimplemented!();
+        } else {
+            false
+        }
+    }
+
     /// Replace the `n`th newest local variable with `val`, as well as removing that variable from the context of the term.
     pub fn subst_single(&self, n: usize, val: &Self) -> Self {
         self.subst(|meta, x, push| match (n + push).cmp(&x) {
@@ -505,6 +600,18 @@ impl<M: Clone, B: Clone> Term<M, B> {
     pub fn strip_args(mut self) -> (Self, Vec<Self>) {
         let mut args = Vec::new();
         while let TermVariant::App(fun, arg) = *self.variant {
+            args.push(arg);
+            self = fun
+        }
+        args.reverse();
+        (self, args)
+    }
+
+    /// Seperates terms of the form `forall (x1 : T1) .. (xn : Tn), t` into `([(x1 : T1), .. , (xn : Tn)], t)`.
+    /// If the input is not a product, it is returned unchanged.
+    pub fn strip_args_ref(mut self: &Self) -> (&Self, Vec<&Self>) {
+        let mut args = Vec::new();
+        while let TermVariant::App(fun, arg) = &*self.variant {
             args.push(arg);
             self = fun
         }

@@ -1,0 +1,6 @@
+ --> tests/inductive/positivity.v:2:33
+  |
+2 | Inductive I : Prop := not_I_I : forall f : (forall i : I, False), I.
+  |                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = This constructor fails the positivity condition
