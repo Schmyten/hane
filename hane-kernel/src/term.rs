@@ -457,11 +457,11 @@ impl<M: Clone, B: Clone> Term<M, B> {
         }
     }
 
-    fn subtype_inner(&self, other: &Self, global: &Global<M, B>) -> bool {
+    fn subtype_inner(&self, other: &Self) -> bool {
         match (&*self.variant, &*other.variant) {
             (TermVariant::Sort(l), TermVariant::Sort(r)) => l <= r,
             (TermVariant::Product(_, l0, l1), TermVariant::Product(_, r0, r1)) => {
-                l0 == r0 && l1.subtype_inner(r1, global)
+                l0 == r0 && l1.subtype_inner(r1)
             }
             (l, r) => l == r,
         }
@@ -479,7 +479,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
         this.eta();
         other0.normalize(global, local);
         other0.eta();
-        if this.subtype_inner(&other0, global) {
+        if this.subtype_inner(&other0) {
             Ok(())
         } else {
             Err(TypeError::new(
