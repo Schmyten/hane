@@ -6,6 +6,114 @@ use crate::entry::{Binder, Entry, EntryRef};
 use crate::global::GEntryRef;
 use crate::{Global, Sort, Stack, TypeError, TypeErrorVariant};
 
+pub trait TermLike<M: Clone, B: Clone>: Sized {
+    /// Attempts to replace all occurrences of `Var(n)` with the result of `f(meta, n, push)`
+    /// where `push` is the amount of local binders passed to find the variable.
+    ///
+    /// This function returns an error if any of the replacements fails.
+    fn try_subst_inner<E>(
+        &self,
+        push: usize,
+        f: &mut impl FnMut(&M, usize, usize) -> Result<Term<M, B>, E>,
+    ) -> Result<Self, E>;
+
+    /// Attempts to replace all occurrences of `Var(n)` with the result of `f(meta, n, push)`
+    ///
+    /// This function returns an error if any of the replacements fails.
+    fn try_subst<E>(
+        &self,
+        mut f: impl FnMut(&M, usize, usize) -> Result<Term<M, B>, E>,
+    ) -> Result<Self, E> {
+        self.try_subst_inner(0, &mut f)
+    }
+
+    /// Replaces all occurrences of `Var(n)` with the result of `f(meta, n, push)`
+    fn subst(&self, mut f: impl FnMut(&M, usize, usize) -> Term<M, B>) -> Self {
+        let res = self.try_subst::<Infallible>(|meta, x, push| Ok(f(meta, x, push)));
+        match res {
+            Ok(t) => t,
+            Err(i) => match i {},
+        }
+    }
+
+    /// Changes the context of the term to include `amount` new local variables.
+    fn move_in(&self, amount: usize) -> Self {
+        self.subst(|meta, n, cut| {
+            let n = if cut <= n { n + amount } else { n };
+            Term {
+                meta: meta.clone(),
+                variant: Box::new(TermVariant::Var(n)),
+            }
+        })
+    }
+
+    /// Attempts to remove the newest `amount` local variables from the context of the term
+    ///
+    /// This function return `None` if the term contains any of the removed variables
+    fn move_out(&self, amount: usize) -> Option<Self> {
+        self.try_subst(|meta, x, push| match push.cmp(&x) {
+            Ordering::Less => Ok(Term {
+                meta: meta.clone(),
+                variant: Box::new(TermVariant::Var(x - amount)),
+            }),
+            Ordering::Equal => Err(()),
+            Ordering::Greater => Ok(Term {
+                meta: meta.clone(),
+                variant: Box::new(TermVariant::Var(x)),
+            }),
+        })
+        .ok()
+    }
+
+    /// Replace the `n`th newest local variable with `val`, as well as removing that variable from the context of the term.
+    fn subst_single(&self, n: usize, val: &Term<M, B>) -> Self {
+        self.subst(|meta, x, push| match (n + push).cmp(&x) {
+            Ordering::Less => Term {
+                meta: meta.clone(),
+                variant: Box::new(TermVariant::Var(x - 1)),
+            },
+            Ordering::Equal => val.move_in(push),
+            Ordering::Greater => Term {
+                meta: meta.clone(),
+                variant: Box::new(TermVariant::Var(x)),
+            },
+        })
+    }
+
+    /// Replaces a range of local variables with the results of `vals` thought of as a slice of terms.
+    ///
+    /// The range starts from the `n + len - 1`th newest and end with the `n`th newest  (included)
+    ///
+    /// The context of results of `vals` should be the context of the term without that range of variables.
+    fn subst_many<'a>(
+        &'a self,
+        n: usize,
+        len: usize,
+        vals: impl Fn(usize) -> &'a Term<M, B>,
+    ) -> Self
+    where
+        M: 'a,
+        B: 'a,
+    {
+        self.subst(|meta, x, push| {
+            if x < n + push {
+                Term {
+                    meta: meta.clone(),
+                    variant: Box::new(TermVariant::Var(x)),
+                }
+            } else if x < n + push + len {
+                let i = n + push + len - 1 - x;
+                vals(i).move_in(push)
+            } else {
+                Term {
+                    meta: meta.clone(),
+                    variant: Box::new(TermVariant::Var(x - len)),
+                }
+            }
+        })
+    }
+}
+
 #[derive(Clone)]
 pub struct Term<M, B> {
     pub meta: M,
@@ -100,44 +208,11 @@ impl<M, B> Display for Term<M, B> {
     }
 }
 
-impl<M: Clone, B: Clone> Term<M, B> {
-    //TODO: Find a more descriptive name
-    /// Changes the context of the term to include `amount` new local variables.
-    pub fn push(&self, amount: usize) -> Self {
-        self.subst(|meta, n, cut| {
-            let n = if cut <= n { n + amount } else { n };
-            Term {
-                meta: meta.clone(),
-                variant: Box::new(TermVariant::Var(n)),
-            }
-        })
-    }
-
-    /// Replaces all occurrences of `Var(n)` with the result of `f(meta, n, push)`
-    /// where `push` is the amount of local binders passed to find the variable.
-    pub fn subst(&self, mut f: impl FnMut(&M, usize, usize) -> Self) -> Self {
-        let res = self.try_subst::<Infallible>(|meta, x, push| Ok(f(meta, x, push)));
-        match res {
-            Ok(t) => t,
-            Err(i) => match i {},
-        }
-    }
-
-    /// Attempts to replace all occurrences of `Var(n)` with the result of `f(meta, n, push)`
-    /// where `push` is the amount of local binders passed to find the variable.
-    ///
-    /// This function returns an error if any of the replacements fails.
-    pub fn try_subst<E>(
-        &self,
-        mut f: impl FnMut(&M, usize, usize) -> Result<Self, E>,
-    ) -> Result<Self, E> {
-        self.try_subst_inner(0, &mut f)
-    }
-
+impl<M: Clone, B: Clone> TermLike<M, B> for Term<M, B> {
     fn try_subst_inner<E>(
         &self,
         push: usize,
-        f: &mut impl FnMut(&M, usize, usize) -> Result<Self, E>,
+        f: &mut impl FnMut(&M, usize, usize) -> Result<Term<M, B>, E>,
     ) -> Result<Self, E> {
         let variant = match &*self.variant {
             TermVariant::Sort(sort) => TermVariant::Sort(sort.clone()),
@@ -165,22 +240,8 @@ impl<M: Clone, B: Clone> Term<M, B> {
             TermVariant::Match(t, x, ret, arms) => TermVariant::Match(
                 t.try_subst_inner(push, f)?,
                 x.clone(),
-                MatchArm {
-                    meta: ret.meta.clone(),
-                    constructor: ret.constructor.clone(),
-                    params: ret.params.clone(),
-                    body: ret.body.try_subst_inner(push + ret.params.len() + 1, f)?,
-                },
-                arms.iter()
-                    .map(|arm| {
-                        Ok(MatchArm {
-                            meta: arm.meta.clone(),
-                            constructor: arm.constructor.clone(),
-                            params: arm.params.clone(),
-                            body: arm.body.try_subst_inner(push + arm.params.len(), f)?,
-                        })
-                    })
-                    .collect::<Result<_, E>>()?,
+                ret.try_subst_inner(push + 1, f)?,
+                arms.try_subst_inner(push, f)?,
             ),
         };
         Ok(Term {
@@ -188,7 +249,34 @@ impl<M: Clone, B: Clone> Term<M, B> {
             variant: Box::new(variant),
         })
     }
+}
 
+impl<M: Clone, B: Clone> TermLike<M, B> for MatchArm<M, B> {
+    fn try_subst_inner<E>(
+        &self,
+        push: usize,
+        f: &mut impl FnMut(&M, usize, usize) -> Result<Term<M, B>, E>,
+    ) -> Result<Self, E> {
+        Ok(MatchArm {
+            meta: self.meta.clone(),
+            constructor: self.constructor.clone(),
+            params: self.params.clone(),
+            body: self.body.try_subst_inner(push + self.params.len() + 1, f)?,
+        })
+    }
+}
+
+impl<M: Clone, B: Clone, T: TermLike<M, B>> TermLike<M, B> for Vec<T> {
+    fn try_subst_inner<E>(
+        &self,
+        push: usize,
+        f: &mut impl FnMut(&M, usize, usize) -> Result<Term<M, B>, E>,
+    ) -> Result<Self, E> {
+        self.iter().map(|x| x.try_subst_inner(push, f)).collect()
+    }
+}
+
+impl<M: Clone, B: Clone> Term<M, B> {
     pub fn validate_consts<E>(
         &self,
         mut f: impl FnMut(&str) -> Result<(), E>,
@@ -284,68 +372,6 @@ impl<M: Clone, B: Clone> Term<M, B> {
         }
     }
 
-    /// Replace the `n`th newest local variable with `val`, as well as removing that variable from the context of the term.
-    pub fn subst_single(&self, n: usize, val: &Self) -> Self {
-        self.subst(|meta, x, push| match (n + push).cmp(&x) {
-            Ordering::Less => Term {
-                meta: meta.clone(),
-                variant: Box::new(TermVariant::Var(x - 1)),
-            },
-            Ordering::Equal => val.push(push),
-            Ordering::Greater => Term {
-                meta: meta.clone(),
-                variant: Box::new(TermVariant::Var(x)),
-            },
-        })
-    }
-
-    /// Attempts to remove the `n`th newest local variable from the context of the term
-    ///
-    /// This function return `None` if the term contains `Var(n)`
-    pub fn pop(&self, n: usize) -> Option<Self> {
-        self.try_subst(|meta, x, push| match (n + push).cmp(&x) {
-            Ordering::Less => Ok(Term {
-                meta: meta.clone(),
-                variant: Box::new(TermVariant::Var(x - 1)),
-            }),
-            Ordering::Equal => Err(()),
-            Ordering::Greater => Ok(Term {
-                meta: meta.clone(),
-                variant: Box::new(TermVariant::Var(x)),
-            }),
-        })
-        .ok()
-    }
-
-    /// Replaces a range of local variables with the results of `vals` thought of as a slice of terms.
-    ///
-    /// The range starts from the `n + len - 1`th newest and end with the `n`th newest  (included)
-    ///
-    /// The context of results of `vals` should be the context of the term without that range of variables.
-    pub fn subst_many<'a>(
-        &'a self,
-        n: usize,
-        len: usize,
-        vals: impl Fn(usize) -> &'a Self,
-    ) -> Self {
-        self.subst(|meta, x, push| {
-            if x < n + push {
-                Term {
-                    meta: meta.clone(),
-                    variant: Box::new(TermVariant::Var(x)),
-                }
-            } else if x < n + push + len {
-                let i = n + push + len - 1 - x;
-                vals(i).push(push)
-            } else {
-                Term {
-                    meta: meta.clone(),
-                    variant: Box::new(TermVariant::Var(x - len)),
-                }
-            }
-        })
-    }
-
     pub fn normalize(&mut self, global: &Global<M, B>, local: &mut Stack<Entry<M, B>>) {
         loop {
             match &mut *self.variant {
@@ -354,14 +380,14 @@ impl<M: Clone, B: Clone> Term<M, B> {
                     // δ reduction
                     if let Some(value) = &local.get(*n).unwrap().value {
                         // To move the value into scope, it must first be pushed passed it self, then passed the other `n`
-                        *self = value.push(*n + 1);
+                        *self = value.move_in(*n + 1);
                         continue;
                     }
                 }
                 TermVariant::Const(name) => {
                     // δ reduction
                     if let Some(value) = global.get(name).unwrap().value {
-                        *self = value.push(local.len());
+                        *self = value.move_in(local.len());
                         continue;
                     }
                 }
@@ -434,7 +460,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                         let mut local = local.slot();
                         local.extend(ret.params.iter().zip(params).zip(&args).enumerate().map(
                             |(i, ((x, param), value))| {
-                                Entry::with_value(x.clone(), value.push(i), param.ttype.clone())
+                                Entry::with_value(x.clone(), value.move_in(i), param.ttype.clone())
                             },
                         ));
                         local.extend(
@@ -475,7 +501,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                         let mut local = local.slot();
                         local.extend(arm.params.iter().zip(params).zip(&args).enumerate().map(
                             |(i, ((x, param), value))| {
-                                Entry::with_value(x.clone(), value.push(i), param.ttype.clone())
+                                Entry::with_value(x.clone(), value.move_in(i), param.ttype.clone())
                             },
                         ));
                         local.extend(
@@ -522,7 +548,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
         if let TermVariant::Abstract(_, _, body) = &*self.variant {
             if let TermVariant::App(f, v) = &*body.variant {
                 if let TermVariant::Var(0) = &*v.variant {
-                    if let Some(f) = f.pop(0) {
+                    if let Some(f) = f.move_out(1) {
                         *self = f;
                     }
                 }
@@ -679,17 +705,20 @@ impl<M: Clone, B: Clone> Term<M, B> {
             },
             TermVariant::Var(n) => {
                 // To move the type into scope, it must first be pushed passed it self, then passed the other `n`
-                return local.get(*n).map(|e| e.ttype.push(*n + 1)).ok_or_else(|| {
-                    (
-                        self.meta.clone(),
-                        TypeError::new(local, TypeErrorVariant::DebruijnOutOfScope(*n)),
-                    )
-                });
+                return local
+                    .get(*n)
+                    .map(|e| e.ttype.move_in(*n + 1))
+                    .ok_or_else(|| {
+                        (
+                            self.meta.clone(),
+                            TypeError::new(local, TypeErrorVariant::DebruijnOutOfScope(*n)),
+                        )
+                    });
             }
             TermVariant::Const(name) => {
                 return global
                     .get(name)
-                    .map(|EntryRef { ttype, .. }| ttype.push(local.len()))
+                    .map(|EntryRef { ttype, .. }| ttype.move_in(local.len()))
                     .ok_or_else(|| {
                         (
                             self.meta.clone(),
@@ -806,7 +835,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                     let mut local = local.slot();
                     local.extend(ret.params.iter().zip(params).zip(&args).enumerate().map(
                         |(i, ((x, param), value))| {
-                            Entry::with_value(x.clone(), value.push(i), param.ttype.clone())
+                            Entry::with_value(x.clone(), value.move_in(i), param.ttype.clone())
                         },
                     ));
                     local.extend(
@@ -907,7 +936,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                     let mut local = local.slot();
                     local.extend(arm.params.iter().zip(params).zip(&args).enumerate().map(
                         |(i, ((x, param), value))| {
-                            Entry::with_value(x.clone(), value.push(i), param.ttype.clone())
+                            Entry::with_value(x.clone(), value.move_in(i), param.ttype.clone())
                         },
                     ));
                     local.extend(
@@ -936,7 +965,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                             },
                         );
                     // The expected return type is moved into scope, then all the type arguments of the constructor are substituted into it.
-                    let exp_type = ret.body.push(arm.params.len()).subst_many(
+                    let exp_type = ret.body.move_in(arm.params.len()).subst_many(
                         arm.params.len(),
                         constructor.args.len() + 1,
                         |i| {
