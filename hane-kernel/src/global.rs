@@ -315,7 +315,7 @@ impl<M: Clone, B: Clone> Command<M, B> {
                             .rev()
                             .fold(body.ttype.clone(), |body, param| Term {
                                 meta: body.meta.clone(),
-                                variant: Box::new(TermVariant::Product(param.x, param.ttype, body)),
+                                variant: Box::new(TermVariant::Product(param, body)),
                             });
 
                     ind_bodies.push(GIndBody {
@@ -371,11 +371,7 @@ impl<M: Clone, B: Clone> Command<M, B> {
                                 constructor.ttype.clone(),
                                 |body, binder| Term {
                                     meta: body.meta.clone(),
-                                    variant: Box::new(TermVariant::Product(
-                                        binder.x,
-                                        binder.ttype,
-                                        body,
-                                    )),
+                                    variant: Box::new(TermVariant::Product(binder, body)),
                                 },
                             );
 

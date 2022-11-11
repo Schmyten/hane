@@ -52,34 +52,34 @@ pub fn write_term<M>(
             }
             Ok(())
         }
-        TermVariant::Product(x, x_tp, t) => {
-            let x = fresh(x, names);
+        TermVariant::Product(binder, body) => {
+            let x = fresh(&binder.x, names);
             if level < 200 {
                 write!(buf, "(")?;
             }
             write!(buf, "forall {} : ", x.name)?;
-            write_term(buf, x_tp, names, 200)?;
+            write_term(buf, &binder.ttype, names, 200)?;
             write!(buf, ", ")?;
             {
                 let mut names = names.push(x);
-                write_term(buf, t, &mut names, 200)?
+                write_term(buf, body, &mut names, 200)?
             }
             if level < 200 {
                 write!(buf, ")")?;
             }
             Ok(())
         }
-        TermVariant::Abstract(x, x_tp, t) => {
-            let x = fresh(x, names);
+        TermVariant::Abstract(binder, body) => {
+            let x = fresh(&binder.x, names);
             if level < 200 {
                 write!(buf, "(")?;
             }
             write!(buf, "fun {} : ", x.name)?;
-            write_term(buf, x_tp, names, 200)?;
+            write_term(buf, &binder.ttype, names, 200)?;
             write!(buf, " => ")?;
             {
                 let mut names = names.push(x);
-                write_term(buf, t, &mut names, 200)?
+                write_term(buf, body, &mut names, 200)?
             }
             if level < 200 {
                 write!(buf, ")")?;

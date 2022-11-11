@@ -67,22 +67,14 @@ impl Command {
                     .rev()
                     .fold(ttype, |ttype, binder| lowered::Term {
                         meta: ttype.meta.clone(),
-                        variant: Box::new(lowered::TermVariant::Product(
-                            binder.x,
-                            binder.ttype,
-                            ttype,
-                        )),
+                        variant: Box::new(lowered::TermVariant::Product(binder, ttype)),
                     });
                 let value = lowered_params
                     .into_iter()
                     .rev()
                     .fold(value, |value, binder| lowered::Term {
                         meta: value.meta.clone(),
-                        variant: Box::new(lowered::TermVariant::Abstract(
-                            binder.x,
-                            binder.ttype,
-                            value,
-                        )),
+                        variant: Box::new(lowered::TermVariant::Abstract(binder, value)),
                     });
                 global.insert(ident.name.clone());
                 lowered::CommandVariant::Definition(ident.name, ttype, value)
@@ -240,41 +232,45 @@ impl Expr {
             ExprVariant::App(f, v) => {
                 lowered::TermVariant::App(f.lower(global, names)?, v.lower(global, names)?)
             }
-            ExprVariant::Product(binders, t) => {
-                let mut type_stack = Vec::new();
+            ExprVariant::Product(binders, body) => {
+                let mut type_stack = Vec::with_capacity(binders.len());
                 let mut names = names.slot();
                 for Binder { ident, ttype } in binders {
                     let lowered_type = ttype.lower(global, &mut names)?;
                     type_stack.push(lowered_type);
                     names.push_onto(ident);
                 }
-                let t = t.lower(global, &mut names)?;
-                let mut iter = names.pop().zip(type_stack.into_iter().rev());
+                let body = body.lower(global, &mut names)?;
+                let ret = names
+                    .pop()
+                    .zip(type_stack.into_iter().rev())
+                    .map(|(x, ttype)| lowered::Binder { x, ttype })
+                    .fold(body, |inner, binder| lowered::Term {
+                        meta: self.span.clone(),
+                        variant: Box::new(lowered::TermVariant::Product(binder, inner)),
+                    });
 
-                let make_term = |inner, (name, ttype)| lowered::Term {
-                    meta: self.span.clone(),
-                    variant: Box::new(lowered::TermVariant::Product(name, ttype, inner)),
-                };
-                let inner = iter.next().unwrap();
-                return Ok(iter.fold(make_term(t, inner), make_term));
+                return Ok(ret);
             }
-            ExprVariant::Abstract(binders, t) => {
-                let mut type_stack = Vec::new();
+            ExprVariant::Abstract(binders, body) => {
+                let mut type_stack = Vec::with_capacity(binders.len());
                 let mut names = names.slot();
                 for Binder { ident, ttype } in binders {
                     let lowered_type = ttype.lower(global, &mut names)?;
                     type_stack.push(lowered_type);
                     names.push_onto(ident);
                 }
-                let t = t.lower(global, &mut names)?;
-                let mut iter = names.pop().zip(type_stack.into_iter().rev());
+                let body = body.lower(global, &mut names)?;
+                let ret = names
+                    .pop()
+                    .zip(type_stack.into_iter().rev())
+                    .map(|(x, ttype)| lowered::Binder { x, ttype })
+                    .fold(body, |inner, binder| lowered::Term {
+                        meta: self.span.clone(),
+                        variant: Box::new(lowered::TermVariant::Abstract(binder, inner)),
+                    });
 
-                let make_term = |inner, (name, ttype)| lowered::Term {
-                    meta: self.span.clone(),
-                    variant: Box::new(lowered::TermVariant::Abstract(name, ttype, inner)),
-                };
-                let inner = iter.next().unwrap();
-                return Ok(iter.fold(make_term(t, inner), make_term));
+                return Ok(ret);
             }
             ExprVariant::Bind(x, x_tp, x_val, t) => {
                 let x_tp = x_tp.lower(global, names)?;
