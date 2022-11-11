@@ -1,6 +1,51 @@
-use std::{io::stdin, collections::HashSet};
 use hane_kernel::Global;
-use hane_syntax::{parser::parse, SpanError, eval::EvalError};
+use hane_syntax::{
+    eval::EvalError,
+    lower::LoweringError,
+    parser::{parse, ParseError},
+    Ident, Span, SpanError,
+};
+use std::{
+    collections::HashSet,
+    fmt::{self, Display, Formatter},
+    io::stdin,
+};
+
+enum Error<'a> {
+    ParseError(Option<&'a str>, &'a str, ParseError),
+    SingleCommand,
+    LoweringError(Option<&'a str>, &'a str, SpanError<LoweringError>),
+    EvalError(Option<&'a str>, &'a str, SpanError<EvalError>),
+}
+
+impl<'a> From<(Option<&'a str>, &'a str, ParseError)> for Error<'a> {
+    fn from((input, path, err): (Option<&'a str>, &'a str, ParseError)) -> Error<'a> {
+        Error::ParseError(input, path, err)
+    }
+}
+
+impl<'a> From<(Option<&'a str>, &'a str, SpanError<LoweringError>)> for Error<'a> {
+    fn from((input, path, err): (Option<&'a str>, &'a str, SpanError<LoweringError>)) -> Error<'a> {
+        Error::LoweringError(input, path, err)
+    }
+}
+
+impl<'a> From<(Option<&'a str>, &'a str, SpanError<EvalError>)> for Error<'a> {
+    fn from((input, path, err): (Option<&'a str>, &'a str, SpanError<EvalError>)) -> Error<'a> {
+        Error::EvalError(input, path, err)
+    }
+}
+
+impl<'a> Display for Error<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Error::ParseError(path, input, err) => err.write(path.as_ref().cloned(), input, f),
+            Error::SingleCommand => write!(f, "The cli only accepts a single command at a time"),
+            Error::LoweringError(path, input, err) => err.write(path.as_ref().cloned(), input, f),
+            Error::EvalError(path, input, err) => err.write(path.as_ref().cloned(), input, f),
+        }
+    }
+}
 
 fn main() {
     let mut names = HashSet::new();
@@ -9,41 +54,26 @@ fn main() {
     for line in stdin().lines() {
         let line = line.unwrap();
 
-        let mut commands = match parse(&line) {
-            Ok(commands) => commands,
-            Err(err) => {
-                let err = err.print(None, &line);
-                eprintln!("{err}");
-                continue
-            },
-        };
-
-        if commands.len() != 1 {
-            eprintln!("The cli only accepts a single command at a time");
-            continue
+        if let Err(err) = eval_line(&line, &mut names, &mut global) {
+            eprintln!("{err}")
         }
-
-        let command = commands.pop().unwrap();
-        let command = match command.lower(&mut names) {
-            Ok(command) => command,
-            Err(err) => {
-                let err = err.print(None, &line);
-                eprintln!("{err}");
-                continue
-            }
-        };
-
-        match command.eval(&mut global) {
-            Ok(command) => command,
-            Err((span, err)) => {
-                let err = SpanError {
-                    span,
-                    err: EvalError(err),
-                }
-                .print(None, &line);
-                eprintln!("{err}");
-                continue
-            }
-        };
     }
+}
+
+fn eval_line<'a>(
+    line: &'a str,
+    names: &mut HashSet<String>,
+    global: &mut Global<Span, Ident>,
+) -> Result<(), Error<'a>> {
+    let mut commands = parse(&line).map_err(|err| (None, line, err))?;
+
+    if commands.len() != 1 {
+        return Err(Error::SingleCommand);
+    }
+
+    let command = commands.pop().unwrap();
+    let command = command.lower(names).map_err(|err| (None, line, err))?;
+
+    command.eval(global).map_err(|(span, err)|(None, line, SpanError { span, err: EvalError(err) }))?;
+    Ok(())
 }

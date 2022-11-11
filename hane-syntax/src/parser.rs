@@ -11,7 +11,7 @@ struct HaneParser;
 
 type Pair<'i> = pest::iterators::Pair<'i, Rule>;
 
-type ParseError = SpanError<pest::error::ErrorVariant<Rule>>;
+pub type ParseError = SpanError<pest::error::ErrorVariant<Rule>>;
 
 macro_rules! debug_assert_rule {
     ($pairs:expr, $rule:ident) => {
