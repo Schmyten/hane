@@ -390,10 +390,33 @@ impl<M: Clone, B: Clone> Command<M, B> {
                         .collect::<Result<_, (M, CommandError<M, B>)>>()?;
                 }
 
+                for body in &ind_bodies {
+                    for constructor in &body.constructors {
+                        for param in &constructor.arity {
+                            if !param.ttype.strict_positivity(global, |name| {
+                                ind_bodies.iter().any(|body| body.name == name)
+                            }) {
+                                return Err((
+                                    constructor.arity_type.meta.clone(),
+                                    CommandError::ConstructorFailsPositivityCondition,
+                                ));
+                            }
+                        }
+
+                        for arg in &constructor.args {
+                            arg.validate_consts(|name| {
+                                ind_bodies
+                                    .iter()
+                                    .all(|body| body.name != name)
+                                    .then_some(())
+                                    .ok_or(CommandError::ConstructorArgsContainsType)
+                            })?;
+                        }
+                    }
+                }
+
                 // With the constructors typechecked, we can now remove the new types, so that they can be properly instantiated as inductive types
                 global.env.truncate(global.env.len() - ind_bodies.len());
-
-                //TODO: [Positivity Condition](https://coq.inria.fr/distrib/current/refman/language/core/inductive.html#positivity-condition)
 
                 global
                     .env

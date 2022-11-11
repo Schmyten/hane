@@ -49,6 +49,12 @@ impl<'a> Display for EvalError<'a> {
             CommandError::NameAlreadyExists(name) => {
                 write!(f, "The name `{name}` has already been defined")
             }
+            CommandError::ConstructorFailsPositivityCondition => {
+                write!(f, "This constructor fails the positivity condition")
+            }
+            CommandError::ConstructorArgsContainsType => {
+                write!(f, "Types from the constructors type family is not allowed as arguments to the constructed type")
+            }
             CommandError::TypeError(err) => {
                 write_cause(err, &err.local, f)?;
                 writeln!(f)?;
