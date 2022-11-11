@@ -23,6 +23,7 @@ pub enum LoweringError {
     NameNotFree(String),
     UnknownVariable(String),
     ParamsMustMatch,
+    MustNotBeNamed,
     NotAConstructorOf(String, String, Vec<String>),
     DupplicateConstructor(String),
     MissingConstructors(Vec<String>),
@@ -37,6 +38,7 @@ impl Display for LoweringError {
                 f,
                 "Parameters must be syntactically the same on all mutually defined types"
             ),
+            LoweringError::MustNotBeNamed => write!(f, "The parameters do not bind in patterns; they must be replaced by '_'."),
             LoweringError::NotAConstructorOf(ind, name, constructors) => {
                 write!(f, "{name} is not a constructor for {ind}.")?;
                 write!(f, " Constructors are: ")?;
@@ -65,7 +67,10 @@ impl Display for LoweringError {
 
 pub enum LoweringEntry {
     Definition,
-    Inductive(Vec<String>),
+    Inductive {
+        params: usize,
+        constructors: Vec<String>,
+    },
 }
 
 impl Command {
@@ -183,7 +188,10 @@ impl Command {
                     if global
                         .insert(
                             body.name.name.clone(),
-                            LoweringEntry::Inductive(constructors),
+                            LoweringEntry::Inductive {
+                                params: lowered_params.len(),
+                                constructors,
+                            },
                         )
                         .is_some()
                     {
@@ -329,8 +337,11 @@ impl Expr {
             }
             ExprVariant::Match(t, mut name, pat, ret, arms) => {
                 let t = t.lower(global, names)?;
-                let constructors = match global.get(&pat.constructor.name) {
-                    Some(LoweringEntry::Inductive(constructors)) => constructors,
+                let (params, constructors) = match global.get(&pat.constructor.name) {
+                    Some(LoweringEntry::Inductive {
+                        params,
+                        constructors,
+                    }) => (*params, constructors),
                     Some(_) => panic!(),
                     None => {
                         return Err(SpanError {
@@ -342,6 +353,15 @@ impl Expr {
                 let ind = pat.constructor.name;
                 let ret = {
                     let mut names = names.slot();
+                    for param in &pat.params[..params] {
+                        if param.name != "_" {
+                            return Err(SpanError {
+                                span: param.span.clone(),
+                                err: LoweringError::MustNotBeNamed,
+                            });
+                        }
+                    }
+
                     names.extend(pat.params);
                     let body = {
                         let mut names = names.push(name);
@@ -391,6 +411,15 @@ impl Expr {
                     };
 
                     let mut names = names.slot();
+                    for param in &pat.params[..params] {
+                        if param.name != "_" {
+                            return Err(SpanError {
+                                span: param.span.clone(),
+                                err: LoweringError::MustNotBeNamed,
+                            });
+                        }
+                    }
+
                     names.extend(pat.params);
                     let body = body.lower(global, &mut names)?;
                     let params = names.pop().rev().collect();

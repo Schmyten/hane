@@ -1,0 +1,6 @@
+ --> tests/inductive/match/named_ind_param.v:5:26
+  |
+5 |     match p as _ in prod A B return A with
+  |                          ^
+  |
+  = The parameters do not bind in patterns; they must be replaced by '_'.

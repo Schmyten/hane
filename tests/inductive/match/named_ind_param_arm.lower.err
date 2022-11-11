@@ -1,0 +1,6 @@
+ --> tests/inductive/match/named_ind_param_arm.v:6:12
+  |
+6 |     | pair A B x y => x
+  |            ^
+  |
+  = The parameters do not bind in patterns; they must be replaced by '_'.
