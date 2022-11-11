@@ -320,7 +320,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
         &'a self,
         n: usize,
         len: usize,
-        vals: impl Fn(usize) -> &'a Self,
+        vals: impl Fn(usize, usize) -> Self,
     ) -> Self {
         self.subst(|meta, x, push| {
             if x < n + push {
@@ -330,7 +330,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 }
             } else if x < n + push + len {
                 let i = n + push + len - 1 - x;
-                vals(i).push(push)
+                vals(i, push)
             } else {
                 Term {
                     meta: meta.clone(),
@@ -390,7 +390,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
 
                     // ι reduction (Evaluate match expresions)
                     if let TermVariant::Const(constructor) = &*t.app_head().variant {
-                        if let GEntryRef::InductiveConstructor(_, j, _, _) =
+                        if let GEntryRef::InductiveConstructor(_, j, params, _) =
                             global.get_entry(constructor).unwrap()
                         {
                             let arm = &mut arms[j];
@@ -405,7 +405,9 @@ impl<M: Clone, B: Clone> Term<M, B> {
                             };
                             let t = std::mem::replace(t, t_rep);
                             let (_, args) = t.strip_args();
-                            *self = body.subst_many(0, args.len(), |i| &args[i]);
+                            *self = body.subst_many(0, args.len() - params.len(), |i, push| {
+                                args[i + params.len()].push(push)
+                            });
                             continue;
                         }
                     }
@@ -427,50 +429,49 @@ impl<M: Clone, B: Clone> Term<M, B> {
 
                     {
                         let mut local = local.slot();
-                        local.extend(ret.params.iter().zip(params).zip(&args).enumerate().map(
-                            |(i, ((x, param), value))| {
-                                Entry::with_value(x.clone(), value.push(i), param.ttype.clone())
+                        local.extend(ret.params.iter().zip(&body.arity).enumerate().map(
+                            |(i, (x, param))| {
+                                Entry::new(
+                                    x.clone(),
+                                    param.ttype.subst_many(0, args.len(), |j, push| {
+                                        args[j].push(i + push)
+                                    }),
+                                )
                             },
                         ));
-                        local.extend(
-                            ret.params[params.len()..]
-                                .iter()
-                                .zip(&body.arity)
-                                .map(|(x, param)| Entry::new(x.clone(), param.ttype.clone())),
-                        );
-                        let ttype = (0..ret.params.len())
-                            .rev()
-                            .map(|n| Term {
+                        let ttype = Iterator::chain(
+                            args.iter().map(|arg| arg.push(ret.params.len())),
+                            (0..ret.params.len()).rev().map(|n| Term {
                                 meta: self.meta.clone(),
                                 variant: Box::new(TermVariant::Var(n)),
-                            })
-                            .fold(
-                                Term {
-                                    meta: self.meta.clone(),
-                                    variant: Box::new(TermVariant::Const(ind.clone())),
-                                },
-                                |f, v| Term {
-                                    meta: self.meta.clone(),
-                                    variant: Box::new(TermVariant::App(f, v)),
-                                },
-                            );
+                            }),
+                        )
+                        .fold(
+                            Term {
+                                meta: self.meta.clone(),
+                                variant: Box::new(TermVariant::Const(ind.clone())),
+                            },
+                            |f, v| Term {
+                                meta: self.meta.clone(),
+                                variant: Box::new(TermVariant::App(f, v)),
+                            },
+                        );
                         local.push_onto(Entry::new(name.clone(), ttype));
                         ret.body.normalize(global, &mut local);
                     }
 
                     for (arm, constructor) in arms.iter_mut().zip(&body.constructors) {
                         let mut local = local.slot();
-                        local.extend(arm.params.iter().zip(params).zip(&args).enumerate().map(
-                            |(i, ((x, param), value))| {
-                                Entry::with_value(x.clone(), value.push(i), param.ttype.clone())
+                        local.extend(arm.params.iter().zip(&constructor.arity).enumerate().map(
+                            |(i, (x, param))| {
+                                Entry::new(
+                                    x.clone(),
+                                    param
+                                        .ttype
+                                        .subst_many(i, args.len(), |j, push| args[j].push(push + i)),
+                                )
                             },
                         ));
-                        local.extend(
-                            arm.params[params.len()..]
-                                .iter()
-                                .zip(&constructor.arity)
-                                .map(|(x, param)| Entry::new(x.clone(), param.ttype.clone())),
-                        );
                         arm.body.normalize(global, &mut local);
                     }
                 }
@@ -566,7 +567,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
         } else {
             Err(TypeError::new(
                 local,
-                TypeErrorVariant::NotSubtypeType(other.clone(), self.clone()),
+                TypeErrorVariant::NotSubtypeType(other.clone(), self.clone(), other0, this),
             ))
         }
     }
@@ -754,13 +755,13 @@ impl<M: Clone, B: Clone> Term<M, B> {
                     }
                 };
                 // Insure the parameter count on the return pattern is correct
-                if ret.params.len() != params.len() + body.arity.len() {
+                if ret.params.len() != body.arity.len() {
                     return Err((
                         ret.meta.clone(),
                         TypeError::new(
                             local,
                             TypeErrorVariant::IncorrectParameterCount(
-                                params.len() + body.arity.len(),
+                                body.arity.len(),
                                 ret.params.len(),
                             ),
                         ),
@@ -783,35 +784,35 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 let arity_args = args.drain(params.len()..).collect::<Vec<_>>();
 
                 {
-                    // To typecheck the return type, we first need to put the type parameters into scope as well as a opaque version of the match argument.
+                    // To typecheck the return type, we first need to put the arity into scope as well as an opaque version of the match argument.
                     let mut local = local.slot();
-                    local.extend(ret.params.iter().zip(params).zip(&args).enumerate().map(
-                        |(i, ((x, param), value))| {
-                            Entry::with_value(x.clone(), value.push(i), param.ttype.clone())
+                    local.extend(ret.params.iter().zip(&body.arity).enumerate().map(
+                        |(i, (x, param))| {
+                            Entry::new(
+                                x.clone(),
+                                param
+                                    .ttype
+                                    .subst_many(i, args.len(), |j, push| args[j].push(push + i)),
+                            )
                         },
                     ));
-                    local.extend(
-                        ret.params[params.len()..]
-                            .iter()
-                            .zip(&body.arity)
-                            .map(|(x, param)| Entry::new(x.clone(), param.ttype.clone())),
-                    );
-                    let ttype = (0..ret.params.len())
-                        .rev()
-                        .map(|n| Term {
+                    let ttype = Iterator::chain(
+                        args.iter().map(|arg| arg.push(ret.params.len())),
+                        (0..ret.params.len()).rev().map(|n| Term {
                             meta: self.meta.clone(),
                             variant: Box::new(TermVariant::Var(n)),
-                        })
-                        .fold(
-                            Term {
-                                meta: self.meta.clone(),
-                                variant: Box::new(TermVariant::Const(ind.clone())),
-                            },
-                            |f, v| Term {
-                                meta: self.meta.clone(),
-                                variant: Box::new(TermVariant::App(f, v)),
-                            },
-                        );
+                        }),
+                    )
+                    .fold(
+                        Term {
+                            meta: self.meta.clone(),
+                            variant: Box::new(TermVariant::Const(ind.clone())),
+                        },
+                        |f, v| Term {
+                            meta: self.meta.clone(),
+                            variant: Box::new(TermVariant::App(f, v)),
+                        },
+                    );
                     local.push_onto(Entry::new(name.clone(), ttype));
                     let ret_sort = ret.body.type_check(global, &mut local)?;
                     let sort = ret_sort
@@ -849,58 +850,62 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 }
 
                 for (arm, constructor) in arms.iter().zip(&body.constructors) {
-                    if arm.params.len() != params.len() + constructor.arity.len() {
+                    if arm.params.len() != constructor.arity.len() {
                         return Err((
                             arm.meta.clone(),
                             TypeError::new(
                                 local,
                                 TypeErrorVariant::IncorrectParameterCount(
-                                    params.len() + constructor.arity.len(),
+                                    constructor.arity.len(),
                                     arm.params.len(),
                                 ),
                             ),
                         ));
                     }
                     let mut local = local.slot();
-                    local.extend(arm.params.iter().zip(params).zip(&args).enumerate().map(
-                        |(i, ((x, param), value))| {
-                            Entry::with_value(x.clone(), value.push(i), param.ttype.clone())
+                    local.extend(arm.params.iter().zip(&constructor.arity).enumerate().map(
+                        |(i, (x, param))| {
+                            Entry::new(
+                                x.clone(),
+                                param
+                                    .ttype
+                                    .subst_many(i, args.len(), |j, push| args[j].push(push + i)),
+                            )
                         },
                     ));
-                    local.extend(
-                        arm.params[params.len()..]
-                            .iter()
-                            .zip(&constructor.arity)
-                            .map(|(x, param)| Entry::new(x.clone(), param.ttype.clone())),
-                    );
                     let arm_type = arm.body.type_check(global, &mut local)?;
                     // `this` is the constructor applied to the pattern paramters
-                    // It looks like `arm.constructor 'n '(n-1) ... '1 '0`
-                    let this = (0..arm.params.len())
-                        .rev()
-                        .map(|n| Term {
+                    // It looks like `arm.constructor args 'n '(n-1) ... '1 '0`
+                    let this = Iterator::chain(
+                        args.iter().map(|arg| arg.push(arm.params.len())),
+                        (0..arm.params.len()).rev().map(|n| Term {
                             meta: self.meta.clone(),
                             variant: Box::new(TermVariant::Var(n)),
-                        })
-                        .fold(
-                            Term {
-                                meta: self.meta.clone(),
-                                variant: Box::new(TermVariant::Const(constructor.name.clone())),
-                            },
-                            |f, v| Term {
-                                meta: self.meta.clone(),
-                                variant: Box::new(TermVariant::App(f, v)),
-                            },
-                        );
+                        }),
+                    )
+                    .fold(
+                        Term {
+                            meta: self.meta.clone(),
+                            variant: Box::new(TermVariant::Const(constructor.name.clone())),
+                        },
+                        |f, v| Term {
+                            meta: self.meta.clone(),
+                            variant: Box::new(TermVariant::App(f, v)),
+                        },
+                    );
                     // The expected return type is moved into scope, then all the type arguments of the constructor are substituted into it.
                     let exp_type = ret.body.push(arm.params.len()).subst_many(
                         arm.params.len(),
-                        constructor.args.len() + 1,
-                        |i| {
-                            if i < constructor.args.len() {
-                                &constructor.args[i]
+                        constructor.args.len() - params.len() + 1,
+                        |i, push| {
+                            if i + params.len() < constructor.args.len() {
+                                constructor.args[i + params.len()]
+                                    .subst_many(0, args.len(), |i, push| {
+                                        args[i].push(arm.params.len() + push)
+                                    })
+                                    .push(push)
                             } else {
-                                &this
+                                this.push(push)
                             }
                         },
                     );
@@ -909,16 +914,13 @@ impl<M: Clone, B: Clone> Term<M, B> {
                         .map_err(|err| (arm.body.meta.clone(), err))?;
                 }
 
-                ret.body
-                    .subst_many(0, args.len() + arity_args.len() + 1, |i| {
-                        if i < args.len() {
-                            &args[i]
-                        } else if i < args.len() + arity_args.len() {
-                            &arity_args[i - args.len()]
-                        } else {
-                            t
-                        }
-                    })
+                ret.body.subst_many(0, arity_args.len() + 1, |i, push| {
+                    if i < arity_args.len() {
+                        arity_args[i].push(push)
+                    } else {
+                        t.push(push)
+                    }
+                })
             }
         })
     }

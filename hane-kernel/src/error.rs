@@ -14,7 +14,7 @@ pub struct TypeError<M, B> {
 }
 
 pub enum TypeErrorVariant<M, B> {
-    NotSubtypeType(Term<M, B>, Term<M, B>),
+    NotSubtypeType(Term<M, B>, Term<M, B>, Term<M, B>, Term<M, B>),
     IncompatibleTypes(Term<M, B>, Term<M, B>),
     NotAProduct(Term<M, B>),
     NotASort(Term<M, B>),

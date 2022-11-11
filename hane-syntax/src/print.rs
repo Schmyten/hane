@@ -112,14 +112,17 @@ pub fn write_term<M: Clone>(
             write_term(buf, t, global, names, 200)?;
             let mut name = fresh(name, names);
             write!(buf, " as {} in {}", name.name, ind)?;
-            let constructors =
-                if let GEntryRef::Inductive(i, _, bodies) = global.get_entry(ind).unwrap() {
-                    &*bodies[i].constructors
+            let (params, constructors) =
+                if let GEntryRef::Inductive(i, params, bodies) = global.get_entry(ind).unwrap() {
+                    (params.len(), &*bodies[i].constructors)
                 } else {
                     panic!()
                 };
             {
                 let mut names = names.slot();
+                for _ in 0..params {
+                    write!(buf, " _")?;
+                }
                 for x in &ret.params {
                     let as_names = names.push(name);
                     let x = fresh(x, &as_names);
@@ -129,7 +132,7 @@ pub fn write_term<M: Clone>(
                 }
                 write!(buf, " return ")?;
                 let mut names = names.push(name);
-                write_term(buf, term, global, &mut names, 200)?;
+                write_term(buf, &ret.body, global, &mut names, 200)?;
                 name = names.pop().next().unwrap();
             }
             write!(buf, " with")?;
@@ -138,6 +141,9 @@ pub fn write_term<M: Clone>(
                 write!(buf, "{sep} {}", constructor.name)?;
                 sep = " |";
                 let mut names = names.slot();
+                for _ in 0..params {
+                    write!(buf, " _")?;
+                }
                 for x in &arm.params {
                     let as_names = names.push(name);
                     let x = fresh(x, &as_names);
@@ -147,7 +153,7 @@ pub fn write_term<M: Clone>(
                 }
                 write!(buf, " => ")?;
                 let mut names = names.push(name);
-                write_term(buf, term, global, &mut names, 200)?;
+                write_term(buf, &arm.body, global, &mut names, 200)?;
                 name = names.pop().next().unwrap();
             }
             write!(buf, " end")

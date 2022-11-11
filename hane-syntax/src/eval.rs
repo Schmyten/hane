@@ -14,7 +14,7 @@ fn write_cause(
     f: &mut Formatter,
 ) -> fmt::Result {
     match &err.variant {
-        TypeErrorVariant::NotSubtypeType(_, _) => write!(f, "Invalid Subtype"),
+        TypeErrorVariant::NotSubtypeType(_, _, _, _) => write!(f, "Invalid Subtype"),
         TypeErrorVariant::IncompatibleTypes(_, _) => write!(f, "Incompatible Types"),
         TypeErrorVariant::NotAProduct(_) => write!(f, "Expected a product"),
         TypeErrorVariant::NotASort(_) => write!(f, "Expected a sort"),
@@ -62,12 +62,19 @@ impl<'a> Display for EvalError<'a> {
                 let mut names = write_local(f, &err.local, global, &mut names)?;
                 writeln!(f)?;
                 match &err.variant {
-                    TypeErrorVariant::NotSubtypeType(expected, actual) => {
+                    TypeErrorVariant::NotSubtypeType(expected, actual, expected0, actual0) => {
                         write!(f, "Expected: ")?;
                         write_term(f, expected, global, &mut names, 200)?;
                         writeln!(f)?;
                         write!(f, "Actual: ")?;
-                        write_term(f, actual, global, &mut names, 200)
+                        write_term(f, actual, global, &mut names, 200)?;
+                        writeln!(f)?;
+                        writeln!(f)?;
+                        write!(f, "Expected: ")?;
+                        write_term(f, expected0, global, &mut names, 200)?;
+                        writeln!(f)?;
+                        write!(f, "Actual: ")?;
+                        write_term(f, actual0, global, &mut names, 200)
                     }
                     TypeErrorVariant::IncompatibleTypes(expected, actual) => {
                         write!(f, "Expected: ")?;

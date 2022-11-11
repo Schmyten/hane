@@ -9,3 +9,6 @@ P: forall T0 : Prop, T0
 
 Expected: Prop
 Actual: Type{0}
+
+Expected: Prop
+Actual: Type{0}
