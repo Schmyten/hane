@@ -44,7 +44,7 @@ fn main() {
                     continue;
                 }
                 Err(err) => {
-                    let err = err.print(path.to_string_lossy().as_ref(), &content);
+                    let err = err.print(Some(path.to_string_lossy().as_ref()), &content);
                     if err != parse_err {
                         eprintln!("{name}: Parsing error does not match expected error");
                         eprintln!("expected:");
@@ -63,7 +63,7 @@ fn main() {
         let commands = match parse_result {
             Ok(commands) => commands,
             Err(err) => {
-                let err = err.print(path.to_string_lossy().as_ref(), &content);
+                let err = err.print(Some(path.to_string_lossy().as_ref()), &content);
                 eprintln!("{name}: Failed to parse expresion");
                 eprintln!("```\n{err}\n```");
                 failed += 1;
@@ -95,7 +95,7 @@ fn main() {
                     continue;
                 }
                 Err(err) => {
-                    let err = err.print(path.to_string_lossy().as_ref(), &content);
+                    let err = err.print(Some(path.to_string_lossy().as_ref()), &content);
                     if err != lower_err {
                         eprintln!("{name}: Lowering error does not match expected error");
                         eprintln!("expected:");
@@ -124,7 +124,7 @@ fn main() {
         let commands = match lower {
             Ok(commands) => commands,
             Err(err) => {
-                let err = err.print(path.to_string_lossy().as_ref(), &content);
+                let err = err.print(Some(path.to_string_lossy().as_ref()), &content);
                 eprintln!("{name}: Lowering failed with error:");
                 eprintln!("```\n{err}\n```");
                 failed += 1;
@@ -177,7 +177,7 @@ fn main() {
                         span,
                         err: EvalError(err),
                     }
-                    .print(path.to_string_lossy().as_ref(), &content);
+                    .print(Some(path.to_string_lossy().as_ref()), &content);
                     if err != result_err {
                         eprintln!("{name}: Error does not match expected error");
                         eprintln!("expected:");
@@ -208,7 +208,7 @@ fn main() {
                 span,
                 err: EvalError(err),
             }
-            .print(path.to_string_lossy().as_ref(), &content);
+            .print(Some(path.to_string_lossy().as_ref()), &content);
             eprintln!("{name}: Failed with error:");
             eprintln!("```\n{err}\n```");
             failed += 1;
