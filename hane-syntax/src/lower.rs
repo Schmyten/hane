@@ -335,7 +335,7 @@ impl Expr {
                 let t = t?;
                 lowered::TermVariant::Bind(x, x_tp, x_val, t)
             }
-            ExprVariant::Match(t, mut name, pat, ret, arms) => {
+            ExprVariant::Match(t, mut name, mut pat, ret, arms) => {
                 let t = t.lower(global, names)?;
                 let (params, constructors) = match global.get(&pat.constructor.name) {
                     Some(LoweringEntry::Inductive {
@@ -353,10 +353,10 @@ impl Expr {
                 let ind = pat.constructor.name;
                 let ret = {
                     let mut names = names.slot();
-                    for param in &pat.params[..params] {
+                    for param in pat.params.drain(..params) {
                         if param.name != "_" {
                             return Err(SpanError {
-                                span: param.span.clone(),
+                                span: param.span,
                                 err: LoweringError::MustNotBeNamed,
                             });
                         }
@@ -377,7 +377,7 @@ impl Expr {
                     }
                 };
                 let mut lowered_arms = vec![None; constructors.len()];
-                for (pat, body) in arms {
+                for (mut pat, body) in arms {
                     if !global.contains_key(&pat.constructor.name) {
                         return Err(SpanError {
                             span: pat.constructor.span.clone(),
@@ -411,10 +411,10 @@ impl Expr {
                     };
 
                     let mut names = names.slot();
-                    for param in &pat.params[..params] {
+                    for param in pat.params.drain(..params) {
                         if param.name != "_" {
                             return Err(SpanError {
-                                span: param.span.clone(),
+                                span: param.span,
                                 err: LoweringError::MustNotBeNamed,
                             });
                         }
