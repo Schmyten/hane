@@ -1,6 +1,8 @@
 use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
 
+pub mod stack_link;
+
 /// First in last out stack, with indexation from newest to oldest entry.
 /// All elements must be inserted through a `StackSlot`.
 #[derive(Default, Clone)]
@@ -39,7 +41,7 @@ impl<T> Stack<T> {
 
     /// Shortens the stack, keeping the oldest len elements and dropping the rest.
     /// If len is greater than the stack's current length, this has no effect.
-    pub fn truncate(&mut self, len: usize) {
+    fn truncate(&mut self, len: usize) {
         self.0.truncate(len)
     }
 

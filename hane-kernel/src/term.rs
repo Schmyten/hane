@@ -4,6 +4,7 @@ use std::fmt::{self, Display, Formatter};
 
 use crate::entry::{Binder, Entry, EntryRef};
 use crate::global::GEntryRef;
+use crate::stack::stack_link::StackLink;
 use crate::{Global, Sort, Stack, TypeError, TypeErrorVariant};
 
 #[derive(Clone)]
@@ -341,12 +342,21 @@ impl<M: Clone, B: Clone> Term<M, B> {
     }
 
     pub fn normalize(&mut self, global: &Global<M, B>, local: &mut Stack<Entry<M, B>>) {
+        let mut local = StackLink::new(local, |entry| &entry.value);
+        self.normalize_inner(global, &mut local);
+    }
+
+    fn normalize_inner<F: Fn(&Entry<M, B>) -> &Option<Term<M, B>>>(
+        &mut self,
+        global: &Global<M, B>,
+        local: &mut StackLink<Entry<M, B>, Option<Term<M, B>>, F>,
+    ) {
         loop {
             match &mut *self.variant {
                 TermVariant::Sort(_) => break,
                 TermVariant::Var(n) => {
                     // δ reduction
-                    if let Some(value) = &local.get(*n).unwrap().value {
+                    if let Some(value) = &local.get(*n).unwrap() {
                         // To move the value into scope, it must first be pushed passed it self, then passed the other `n`
                         *self = value.push(*n + 1);
                         continue;
@@ -360,8 +370,8 @@ impl<M: Clone, B: Clone> Term<M, B> {
                     }
                 }
                 TermVariant::App(f, v) => {
-                    f.normalize(global, local);
-                    v.normalize(global, local);
+                    f.normalize_inner(global, local);
+                    v.normalize_inner(global, local);
 
                     // β reduction
                     if let TermVariant::Abstract(_, _, t) = &*f.variant {
@@ -369,24 +379,24 @@ impl<M: Clone, B: Clone> Term<M, B> {
                         continue;
                     }
                 }
-                TermVariant::Product(x, input_type, output_type) => {
-                    input_type.normalize(global, local);
-                    let mut local = local.push(Entry::new(x.clone(), input_type.clone()));
-                    output_type.normalize(global, &mut local);
+                TermVariant::Product(_, input_type, output_type) => {
+                    input_type.normalize_inner(global, local);
+                    let mut local = local.push(None);
+                    output_type.normalize_inner(global, &mut local);
                 }
-                TermVariant::Abstract(x, input_type, body) => {
-                    input_type.normalize(global, local);
-                    let mut local = local.push(Entry::new(x.clone(), input_type.clone()));
-                    body.normalize(global, &mut local);
+                TermVariant::Abstract(_, input_type, body) => {
+                    input_type.normalize_inner(global, local);
+                    let mut local = local.push(None);
+                    body.normalize_inner(global, &mut local);
                 }
                 TermVariant::Bind(_name, _type, val, t) => {
-                    val.normalize(global, local);
+                    val.normalize_inner(global, local);
                     // ζ reduction (Remove let binding)
                     *self = t.subst_single(0, val);
                     continue;
                 }
-                TermVariant::Match(t, name, ind, ret, arms) => {
-                    t.normalize(global, local);
+                TermVariant::Match(t, _, _, ret, arms) => {
+                    t.normalize_inner(global, local);
 
                     // ι reduction (Evaluate match expresions)
                     if let TermVariant::Const(constructor) = &*t.app_head().variant {
@@ -412,67 +422,17 @@ impl<M: Clone, B: Clone> Term<M, B> {
                         }
                     }
 
-                    let (i, params, bodies) = match global.get_entry(ind) {
-                        Some(GEntryRef::Inductive(i, params, bodies)) => (i, params, bodies),
-                        Some(_) => panic!("{ind} is not an inductive type"),
-                        None => panic!("{ind} is not defined"),
-                    };
-                    let body = &bodies[i];
-
-                    let mut t_type = t.type_check(global, local).ok().unwrap();
-                    t_type.normalize(global, local);
-                    let (hd, mut args) = t_type.strip_args();
-                    if !hd.is_const(ind) {
-                        panic!("{i} is not the inductive type {ind}")
-                    }
-                    args.truncate(params.len());
-
                     {
                         let mut local = local.slot();
-                        local.extend(ret.params.iter().zip(&body.arity).enumerate().map(
-                            |(i, (x, param))| {
-                                Entry::new(
-                                    x.clone(),
-                                    param.ttype.subst_many(0, args.len(), |j, push| {
-                                        args[j].push(i + push)
-                                    }),
-                                )
-                            },
-                        ));
-                        let ttype = Iterator::chain(
-                            args.iter().map(|arg| arg.push(ret.params.len())),
-                            (0..ret.params.len()).rev().map(|n| Term {
-                                meta: self.meta.clone(),
-                                variant: Box::new(TermVariant::Var(n)),
-                            }),
-                        )
-                        .fold(
-                            Term {
-                                meta: self.meta.clone(),
-                                variant: Box::new(TermVariant::Const(ind.clone())),
-                            },
-                            |f, v| Term {
-                                meta: self.meta.clone(),
-                                variant: Box::new(TermVariant::App(f, v)),
-                            },
-                        );
-                        local.push_onto(Entry::new(name.clone(), ttype));
-                        ret.body.normalize(global, &mut local);
+                        local.extend((0..ret.params.len()).map(|_| None));
+                        local.push_onto(None);
+                        ret.body.normalize_inner(global, &mut local);
                     }
 
-                    for (arm, constructor) in arms.iter_mut().zip(&body.constructors) {
+                    for arm in arms.iter_mut() {
                         let mut local = local.slot();
-                        local.extend(arm.params.iter().zip(&constructor.arity).enumerate().map(
-                            |(i, (x, param))| {
-                                Entry::new(
-                                    x.clone(),
-                                    param
-                                        .ttype
-                                        .subst_many(i, args.len(), |j, push| args[j].push(push + i)),
-                                )
-                            },
-                        ));
-                        arm.body.normalize(global, &mut local);
+                        local.extend((0..arm.params.len()).map(|_| None));
+                        arm.body.normalize_inner(global, &mut local);
                     }
                 }
             }
