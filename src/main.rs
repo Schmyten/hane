@@ -2,7 +2,7 @@ use hane_kernel::global::Global;
 use hane_syntax::eval::EvalError;
 use hane_syntax::parser::parse;
 use hane_syntax::SpanError;
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::fs::read_to_string;
 
 fn main() {
@@ -71,7 +71,7 @@ fn main() {
             }
         };
 
-        let mut global = HashSet::new();
+        let mut global = HashMap::new();
         let lower = commands
             .into_iter()
             .map(|command| command.lower(&mut global))
@@ -175,7 +175,7 @@ fn main() {
                 Err((span, err)) => {
                     let err = SpanError {
                         span,
-                        err: EvalError(err),
+                        err: EvalError(&global, err),
                     }
                     .print(path.to_string_lossy().as_ref(), &content);
                     if err != result_err {
@@ -206,7 +206,7 @@ fn main() {
         if let Err((span, err)) = result {
             let err = SpanError {
                 span,
-                err: EvalError(err),
+                err: EvalError(&global, err),
             }
             .print(path.to_string_lossy().as_ref(), &content);
             eprintln!("{name}: Failed with error:");

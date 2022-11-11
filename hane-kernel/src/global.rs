@@ -10,7 +10,7 @@ pub struct Global<M, B> {
 }
 
 /// A reference to a name in the global environment.
-pub(crate) enum GEntryRef<'a, M, B> {
+pub enum GEntryRef<'a, M, B> {
     Definition(&'a str, &'a Term<M, B>, &'a Term<M, B>),
     Axiom(&'a str, &'a Term<M, B>),
     Inductive(usize, &'a [Binder<M, B>], &'a [GIndBody<M, B>]),
@@ -24,26 +24,26 @@ enum GEntry<M, B> {
 }
 
 /// A single inductive type in a mutually defined set in the global environment.
-pub(crate) struct GIndBody<M, B> {
-    pub(crate) name: String,
-    pub(crate) arity: Vec<Binder<M, B>>,
-    pub(crate) sort: Sort,
+pub struct GIndBody<M, B> {
+    pub name: String,
+    pub arity: Vec<Binder<M, B>>,
+    pub sort: Sort,
     /// Shorthand for `∀ arity.., sort`
-    pub(crate) arity_type: Term<M, B>,
+    pub arity_type: Term<M, B>,
     /// Shorthand for `∀ param.. arity.., sort`
-    pub(crate) full_type: Term<M, B>,
-    pub(crate) constructors: Vec<GIndConstructor<M, B>>,
+    pub full_type: Term<M, B>,
+    pub constructors: Vec<GIndConstructor<M, B>>,
 }
 
 /// A Constructor of an inductive type.
-pub(crate) struct GIndConstructor<M, B> {
-    pub(crate) name: String,
-    pub(crate) arity: Vec<Binder<M, B>>,
-    pub(crate) args: Vec<Term<M, B>>,
+pub struct GIndConstructor<M, B> {
+    pub name: String,
+    pub arity: Vec<Binder<M, B>>,
+    pub args: Vec<Term<M, B>>,
     /// Shorthand for `∀ arity.., ttype`
-    pub(crate) arity_type: Term<M, B>,
+    pub arity_type: Term<M, B>,
     /// Shorthand for `∀ param.. arity.., ttype`
-    pub(crate) full_type: Term<M, B>,
+    pub full_type: Term<M, B>,
 }
 
 impl<M, B> Display for Global<M, B> {
@@ -128,7 +128,7 @@ impl<M: Clone, B: Clone> Global<M, B> {
     }
 
     /// Returns a reference to the entry containing the constant `name` along with where inside the entry `name` was found.
-    pub(crate) fn get_entry(&self, name: &str) -> Option<GEntryRef<M, B>> {
+    pub fn get_entry(&self, name: &str) -> Option<GEntryRef<M, B>> {
         self.env.iter().find_map(|(_, entry)| match entry {
             GEntry::Definition(x, ttype, val) => {
                 (x == name).then_some(GEntryRef::Definition(x, ttype, val))
