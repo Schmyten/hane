@@ -60,6 +60,9 @@ pub enum CommandVariant {
     Definition(Ident, Vec<Binder>, Expr, Expr),
     Axiom(Ident, Expr),
     Inductive(Vec<IndBody>),
+    Print(Ident),
+    Check(Expr),
+    Compute(Expr),
 }
 
 /// A single type in a mutually defined inductive type set

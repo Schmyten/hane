@@ -1,8 +1,10 @@
 use hane_kernel::global::Global;
 use hane_syntax::eval::EvalError;
 use hane_syntax::parser::parse;
+use hane_syntax::print::Print;
 use hane_syntax::SpanError;
 use std::collections::HashSet;
+use std::fmt::Write;
 use std::fs::read_to_string;
 
 fn main() {
@@ -134,7 +136,6 @@ fn main() {
 
         let lower_out = read_to_string(&lower_out).unwrap();
         let lower_print = {
-            use std::fmt::Write;
             let mut print = String::new();
             commands
                 .iter()
@@ -153,9 +154,10 @@ fn main() {
         }
 
         let mut global = Global::new();
+        let mut out_buf = String::new();
         let result = commands
             .into_iter()
-            .try_for_each(|command| command.eval(&mut global));
+            .try_for_each(|command| command.eval(&mut global, |out| write!(out_buf, "{}", Print(out)).unwrap()));
 
         let result_err_path = {
             let mut path = path.to_path_buf();
