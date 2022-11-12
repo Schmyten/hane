@@ -57,12 +57,12 @@ impl<'a, M> Display for Print<CommandOut<'a, M, Ident>> {
                         }
                     }
                     writeln!(f, ".")
-                },
+                }
             },
             CommandOut::Term(term) => {
                 write_term(f, term, &mut names, 200)?;
                 writeln!(f)
-            },
+            }
         }
     }
 }

@@ -3,7 +3,8 @@ use hane_syntax::{
     eval::EvalError,
     lower::LoweringError,
     parser::{parse, ParseError},
-    Ident, Span, SpanError, print::Print,
+    print::Print,
+    Ident, Span, SpanError,
 };
 use std::{
     collections::HashSet,
@@ -74,6 +75,17 @@ fn eval_line<'a>(
     let command = commands.pop().unwrap();
     let command = command.lower(names).map_err(|err| (None, line, err))?;
 
-    command.eval(global, |out|print!("{}", Print(out))).map_err(|(span, err)|(None, line, SpanError { span, err: EvalError(err) }))?;
+    command
+        .eval(global, |out| print!("{}", Print(out)))
+        .map_err(|(span, err)| {
+            (
+                None,
+                line,
+                SpanError {
+                    span,
+                    err: EvalError(err),
+                },
+            )
+        })?;
     Ok(())
 }
