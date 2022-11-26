@@ -11,7 +11,7 @@ struct HaneParser;
 
 type Pair<'i> = pest::iterators::Pair<'i, Rule>;
 
-type ParseError = SpanError<pest::error::ErrorVariant<Rule>>;
+pub type ParseError = SpanError<pest::error::ErrorVariant<Rule>>;
 
 macro_rules! debug_assert_rule {
     ($pairs:expr, $rule:ident) => {
@@ -85,6 +85,21 @@ pub fn parse_command(pair: Pair) -> Command {
         Rule::command_inductive => {
             // Skips the `Inductive` keyword and steps over the `with` keywords.
             CommandVariant::Inductive(pairs.skip(1).step_by(2).map(parse_ind_body).collect())
+        }
+        Rule::command_print => {
+            debug_assert_rule!(pairs, keyword_print);
+            let name = parse_ident(pairs.next().unwrap());
+            CommandVariant::Print(name)
+        }
+        Rule::command_check => {
+            debug_assert_rule!(pairs, keyword_check);
+            let expr = parse_expr(pairs.next().unwrap());
+            CommandVariant::Check(expr)
+        }
+        Rule::command_compute => {
+            debug_assert_rule!(pairs, keyword_compute);
+            let expr = parse_expr(pairs.next().unwrap());
+            CommandVariant::Compute(expr)
         }
         r => unreachable!("{:?}", r),
     };

@@ -1,0 +1,7 @@
+Inductive P (Set) : forall['0] (Set) :=
+    | C : forall['0] (((P) ('1)) ('0))
+    with Q (Set) : Set :=
+    | Q1 : (Q) ('0)
+    | Q2 : (Q) ('0).
+Print P.
+Print C.

@@ -60,6 +60,9 @@ pub enum CommandVariant {
     Definition(Ident, Vec<Binder>, Expr, Expr),
     Axiom(Ident, Expr),
     Inductive(Vec<IndBody>),
+    Print(Ident),
+    Check(Expr),
+    Compute(Expr),
 }
 
 /// A single type in a mutually defined inductive type set
@@ -130,15 +133,23 @@ pub struct SpanError<E> {
 }
 
 impl Span {
-    pub fn write(&self, path: &str, input: &str, f: &mut impl Write) -> fmt::Result {
-        if self.start.line == self.end.line {
-            let len = format!("{}", self.start.line).len();
-            let line = input.lines().nth(self.start.line - 1).unwrap();
+    pub fn write(&self, path: Option<&str>, input: &str, f: &mut impl Write) -> fmt::Result {
+        let len = format!("{}", self.end.line).len();
+        if let Some(path) = path {
             writeln!(
                 f,
                 "{0: >len$}--> {1}:{2}:{3}",
                 "", path, self.start.line, self.start.col
             )?;
+        } else {
+            writeln!(
+                f,
+                "{0: >len$}--> {1}:{2}",
+                "", self.start.line, self.start.col
+            )?;
+        }
+        if self.start.line == self.end.line {
+            let line = input.lines().nth(self.start.line - 1).unwrap();
             writeln!(f, "{0: >len$} |", "")?;
             writeln!(f, "{0} | {1}", self.start.line, line)?;
             writeln!(
@@ -151,12 +162,6 @@ impl Span {
             writeln!(f, "{0: >len$} |", "")?;
             write!(f, "{0: >len$} = ", "")?;
         } else {
-            let len = format!("{}", self.end.line).len();
-            writeln!(
-                f,
-                "{0: >len$}--> {1}:{2}:{3}",
-                "", path, self.start.line, self.start.col
-            )?;
             writeln!(f, "{0: >len$} |", "")?;
             let mut sep = "/";
             for (i, line) in input
@@ -177,12 +182,12 @@ impl Span {
 }
 
 impl<E: Display> SpanError<E> {
-    pub fn write(&self, path: &str, input: &str, f: &mut impl Write) -> fmt::Result {
+    pub fn write(&self, path: Option<&str>, input: &str, f: &mut impl Write) -> fmt::Result {
         self.span.write(path, input, f)?;
         write!(f, "{}", self.err)
     }
 
-    pub fn print(&self, path: &str, input: &str) -> String {
+    pub fn print(&self, path: Option<&str>, input: &str) -> String {
         let mut buf = String::new();
         self.write(path, input, &mut buf).unwrap();
         buf

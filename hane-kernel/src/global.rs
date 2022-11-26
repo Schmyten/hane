@@ -10,7 +10,7 @@ pub struct Global<M, B> {
 }
 
 /// A reference to a name in the global environment.
-pub(crate) enum GEntryRef<'a, M, B> {
+pub enum GEntryRef<'a, M, B> {
     Definition(&'a str, &'a Term<M, B>, &'a Term<M, B>),
     Axiom(&'a str, &'a Term<M, B>),
     Inductive(usize, &'a [Binder<M, B>], &'a [GIndBody<M, B>]),
@@ -24,26 +24,26 @@ enum GEntry<M, B> {
 }
 
 /// A single inductive type in a mutually defined set in the global environment.
-pub(crate) struct GIndBody<M, B> {
-    pub(crate) name: String,
-    pub(crate) arity: Vec<Binder<M, B>>,
-    pub(crate) sort: Sort,
+pub struct GIndBody<M, B> {
+    pub name: String,
+    pub arity: Vec<Binder<M, B>>,
+    pub sort: Sort,
     /// Shorthand for `∀ arity.., sort`
-    pub(crate) arity_type: Term<M, B>,
+    pub arity_type: Term<M, B>,
     /// Shorthand for `∀ param.. arity.., sort`
-    pub(crate) full_type: Term<M, B>,
-    pub(crate) constructors: Vec<GIndConstructor<M, B>>,
+    pub full_type: Term<M, B>,
+    pub constructors: Vec<GIndConstructor<M, B>>,
 }
 
 /// A Constructor of an inductive type.
-pub(crate) struct GIndConstructor<M, B> {
-    pub(crate) name: String,
-    pub(crate) arity: Vec<Binder<M, B>>,
-    pub(crate) args: Vec<Term<M, B>>,
+pub struct GIndConstructor<M, B> {
+    pub name: String,
+    pub arity: Vec<Binder<M, B>>,
+    pub args: Vec<Term<M, B>>,
     /// Shorthand for `∀ arity.., ttype`
-    pub(crate) arity_type: Term<M, B>,
+    pub arity_type: Term<M, B>,
     /// Shorthand for `∀ param.. arity.., ttype`
-    pub(crate) full_type: Term<M, B>,
+    pub full_type: Term<M, B>,
 }
 
 impl<M, B> Display for Global<M, B> {
@@ -163,6 +163,12 @@ pub enum CommandVariant<M, B> {
     Axiom(String, Term<M, B>),
     /// Defines a set of mutually inductive types.
     Inductive(Vec<Binder<M, B>>, Vec<IndBody<M, B>>),
+    /// Prints the definition of a constant.
+    Print(String),
+    /// Prints the type of a term.
+    Check(Term<M, B>),
+    /// Computes the normal form of a term and prints it.
+    Compute(Term<M, B>),
 }
 
 /// A single type in a mutually defined inductive type set
@@ -200,13 +206,25 @@ impl<M, B> Display for Command<M, B> {
                 }
                 write!(f, ".")
             }
+            CommandVariant::Print(name) => write!(f, "Print {name}."),
+            CommandVariant::Check(term) => write!(f, "Check {term}."),
+            CommandVariant::Compute(term) => write!(f, "Compute {term}."),
         }
     }
 }
 
+pub enum CommandOut<'a, M, B> {
+    Entry(GEntryRef<'a, M, B>),
+    Term(&'a Term<M, B>),
+}
+
 impl<M: Clone, B: Clone> Command<M, B> {
     /// Evaluates the command, mutating the global environment acordingly.
-    pub fn eval(self, global: &mut Global<M, B>) -> Result<(), (M, CommandError<M, B>)> {
+    pub fn eval(
+        self,
+        global: &mut Global<M, B>,
+        mut out: impl FnMut(CommandOut<M, B>),
+    ) -> Result<(), (M, CommandError<M, B>)> {
         match self.variant {
             CommandVariant::Definition(name, ttype, value) => {
                 global
@@ -421,6 +439,34 @@ impl<M: Clone, B: Clone> Command<M, B> {
                 global
                     .env
                     .push((self.meta, GEntry::Inductive(params, ind_bodies)));
+            }
+            CommandVariant::Print(name) => {
+                match global.get_entry(&name) {
+                    Some(entry) => out(CommandOut::Entry(entry)),
+                    None => {
+                        return Err((
+                            self.meta,
+                            CommandError::TypeError(TypeError::new(
+                                &Stack::new(),
+                                TypeErrorVariant::UndefinedConst(name),
+                            )),
+                        ))
+                    }
+                };
+            }
+            CommandVariant::Check(term) => {
+                let mut local = Stack::new();
+                let ttype = term
+                    .type_check(global, &mut local)
+                    .map_err(|(meta, err)| (meta, CommandError::TypeError(err)))?;
+                out(CommandOut::Term(&ttype))
+            }
+            CommandVariant::Compute(mut term) => {
+                let mut local = Stack::new();
+                term.type_check(global, &mut local)
+                    .map_err(|(meta, err)| (meta, CommandError::TypeError(err)))?;
+                term.normalize(global, &mut local);
+                out(CommandOut::Term(&term))
             }
         }
         Ok(())

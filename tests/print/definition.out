@@ -1,0 +1,1 @@
+Definition id : forall[Set] (forall['0] ('1)) := fun[Set] (fun['0] ('0)).
