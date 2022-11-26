@@ -18,17 +18,26 @@ pub enum TermVariant<M, B> {
     Var(usize),
     Const(String),
     App(Term<M, B>, Term<M, B>),
-    Product(B, Term<M, B>, Term<M, B>),
-    Abstract(B, Term<M, B>, Term<M, B>),
+    Product(Binder<M, B>, Term<M, B>),
+    Abstract(Binder<M, B>, Term<M, B>),
     Bind(B, Term<M, B>, Term<M, B>, Term<M, B>),
-    Match(Term<M, B>, B, MatchArm<M, B>, Vec<MatchArm<M, B>>),
+    Match(Term<M, B>, B, String, MatchArm<M, B>, Vec<MatchArm<M, B>>),
+    Fix(Vec<FixDecl<M, B>>, usize),
 }
 
 #[derive(Clone)]
 pub struct MatchArm<M, B> {
     pub meta: M,
-    pub constructor: String,
     pub params: Vec<B>,
+    pub body: Term<M, B>,
+}
+
+#[derive(Clone)]
+pub struct FixDecl<M, B> {
+    pub name: B,
+    pub params: Vec<Binder<M, B>>,
+    pub anot: usize,
+    pub ttype: Term<M, B>,
     pub body: Term<M, B>,
 }
 
@@ -45,13 +54,13 @@ impl<M, B> PartialEq for TermVariant<M, B> {
             (Self::Var(l0), Self::Var(r0)) => l0 == r0,
             (Self::Const(l0), Self::Const(r0)) => l0 == r0,
             (Self::App(l0, l1), Self::App(r0, r1)) => l0 == r0 && l1 == r1,
-            (Self::Product(_, l0, l1), Self::Product(_, r0, r1)) => l0 == r0 && l1 == r1,
-            (Self::Abstract(_, l0, l1), Self::Abstract(_, r0, r1)) => l0 == r0 && l1 == r1,
+            (Self::Product(l0, l1), Self::Product(r0, r1)) => l0 == r0 && l1 == r1,
+            (Self::Abstract(l0, l1), Self::Abstract(r0, r1)) => l0 == r0 && l1 == r1,
             (Self::Bind(_, l0, l1, l2), Self::Bind(_, r0, r1, r2)) => {
                 l0 == r0 && l1 == r1 && l2 == r2
             }
-            (Self::Match(l0, _, l1, l2), Self::Match(r0, _, r1, r2)) => {
-                l0 == r0 && l1 == r1 && l2 == r2
+            (Self::Match(l0, _, l1, l2, l3), Self::Match(r0, _, r1, r2, r3)) => {
+                l0 == r0 && l1 == r1 && l2 == r2 && l3 == r3
             }
             _ => false,
         }
@@ -60,7 +69,7 @@ impl<M, B> PartialEq for TermVariant<M, B> {
 
 impl<M, B> PartialEq for MatchArm<M, B> {
     fn eq(&self, other: &Self) -> bool {
-        self.constructor == other.constructor && self.body == other.body
+        self.params.len() == other.params.len() && self.body == other.body
     }
 }
 
@@ -74,21 +83,35 @@ impl<M, B> Display for TermVariant<M, B> {
             TermVariant::Var(n) => write!(f, "'{}", n),
             TermVariant::Const(name) => write!(f, "{}", name),
             TermVariant::App(t1, t2) => write!(f, "({}) ({})", t1, t2),
-            TermVariant::Product(_, t1, t2) => write!(f, "forall[{}] ({})", t1, t2),
-            TermVariant::Abstract(_, t1, t2) => write!(f, "fun[{}] ({})", t1, t2),
+            TermVariant::Product(binder, body) => write!(f, "forall[{}] ({})", binder.ttype, body),
+            TermVariant::Abstract(binder, body) => write!(f, "fun[{}] ({})", binder.ttype, body),
             TermVariant::Bind(_, t1, t2, t3) => write!(f, "let[{} : {}] ({})", t1, t2, t3),
-            TermVariant::Match(t, _, ret, arms) => {
-                write!(
-                    f,
-                    "match {t} in {} return {} with",
-                    ret.constructor, ret.body
-                )?;
+            TermVariant::Match(t, _, ind, ret, arms) => {
+                write!(f, "match {t} in {ind} return {} with", ret.body)?;
                 let mut sep = "";
                 for arm in arms {
-                    write!(f, "{sep} {} => {}", arm.constructor, arm.body)?;
+                    write!(f, "{sep} {}", arm.body)?;
                     sep = " |";
                 }
                 write!(f, " end")
+            }
+            TermVariant::Fix(decls, sel) => {
+                let mut sep = "fix";
+                for decl in decls {
+                    write!(f, "{sep}[")?;
+                    sep = " with";
+                    let mut sep = "";
+                    for param in &decl.params {
+                        write!(f, "{sep}{}", param.ttype)?;
+                        sep = ", ";
+                    }
+                    write!(
+                        f,
+                        "]{{struct {}}} : {} := {}",
+                        decl.anot, decl.ttype, decl.body
+                    )?;
+                }
+                write!(f, " for {sel}")
             }
         }
     }
@@ -146,15 +169,19 @@ impl<M: Clone, B: Clone> Term<M, B> {
             TermVariant::App(t, v) => {
                 TermVariant::App(t.try_subst_inner(push, f)?, v.try_subst_inner(push, f)?)
             }
-            TermVariant::Product(x, x_tp, t) => TermVariant::Product(
-                x.clone(),
-                x_tp.try_subst_inner(push, f)?,
-                t.try_subst_inner(push + 1, f)?,
+            TermVariant::Product(binder, body) => TermVariant::Product(
+                Binder {
+                    x: binder.x.clone(),
+                    ttype: binder.ttype.try_subst_inner(push, f)?,
+                },
+                body.try_subst_inner(push + 1, f)?,
             ),
-            TermVariant::Abstract(x, x_tp, t) => TermVariant::Abstract(
-                x.clone(),
-                x_tp.try_subst_inner(push, f)?,
-                t.try_subst_inner(push + 1, f)?,
+            TermVariant::Abstract(binder, body) => TermVariant::Abstract(
+                Binder {
+                    x: binder.x.clone(),
+                    ttype: binder.ttype.try_subst_inner(push, f)?,
+                },
+                body.try_subst_inner(push + 1, f)?,
             ),
             TermVariant::Bind(x, x_tp, x_val, t) => TermVariant::Bind(
                 x.clone(),
@@ -162,12 +189,12 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 x_val.try_subst_inner(push, f)?,
                 t.try_subst_inner(push + 1, f)?,
             ),
-            TermVariant::Match(t, x, ret, arms) => TermVariant::Match(
+            TermVariant::Match(t, x, ind, ret, arms) => TermVariant::Match(
                 t.try_subst_inner(push, f)?,
                 x.clone(),
+                ind.clone(),
                 MatchArm {
                     meta: ret.meta.clone(),
-                    constructor: ret.constructor.clone(),
                     params: ret.params.clone(),
                     body: ret.body.try_subst_inner(push + ret.params.len() + 1, f)?,
                 },
@@ -175,13 +202,13 @@ impl<M: Clone, B: Clone> Term<M, B> {
                     .map(|arm| {
                         Ok(MatchArm {
                             meta: arm.meta.clone(),
-                            constructor: arm.constructor.clone(),
                             params: arm.params.clone(),
                             body: arm.body.try_subst_inner(push + arm.params.len(), f)?,
                         })
                     })
                     .collect::<Result<_, E>>()?,
             ),
+            TermVariant::Fix(_, _) => todo!(),
         };
         Ok(Term {
             meta: self.meta.clone(),
@@ -208,12 +235,12 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 t1.validate_consts_inner(f)?;
                 t2.validate_consts_inner(f)
             }
-            TermVariant::Product(_, t1, t2) => {
-                t1.validate_consts_inner(f)?;
+            TermVariant::Product(t1, t2) => {
+                t1.ttype.validate_consts_inner(f)?;
                 t2.validate_consts_inner(f)
             }
-            TermVariant::Abstract(_, t1, t2) => {
-                t1.validate_consts_inner(f)?;
+            TermVariant::Abstract(t1, t2) => {
+                t1.ttype.validate_consts_inner(f)?;
                 t2.validate_consts_inner(f)
             }
             TermVariant::Bind(_, t1, t2, t3) => {
@@ -221,12 +248,19 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 t2.validate_consts_inner(f)?;
                 t3.validate_consts_inner(f)
             }
-            TermVariant::Match(t, _, ret, arms) => {
+            TermVariant::Match(t, _, _, ret, arms) => {
                 t.validate_consts_inner(f)?;
                 ret.body.validate_consts_inner(f)?;
                 arms.iter()
                     .try_for_each(|arm| arm.body.validate_consts_inner(f))
             }
+            TermVariant::Fix(decls, _) => decls.iter().try_for_each(|decl| {
+                decl.params
+                    .iter()
+                    .try_for_each(|param| param.ttype.validate_consts_inner(f))?;
+                decl.ttype.validate_consts_inner(f)?;
+                decl.body.validate_consts_inner(f)
+            }),
         }
     }
 
@@ -243,8 +277,9 @@ impl<M: Clone, B: Clone> Term<M, B> {
         global: &Global<M, B>,
         f: &mut impl FnMut(&str) -> bool,
     ) -> bool {
-        while let TermVariant::Product(_, input, body) = &*self.variant {
-            if input
+        while let TermVariant::Product(binder, body) = &*self.variant {
+            if binder
+                .ttype
                 .validate_consts(|name| (!f(name)).then_some(()).ok_or(()))
                 .is_err()
             {
@@ -370,19 +405,19 @@ impl<M: Clone, B: Clone> Term<M, B> {
                     v.normalize(global, local);
 
                     // β reduction
-                    if let TermVariant::Abstract(_, _, t) = &*f.variant {
+                    if let TermVariant::Abstract(_, t) = &*f.variant {
                         *self = t.subst_single(0, v);
                         continue;
                     }
                 }
-                TermVariant::Product(x, input_type, output_type) => {
-                    input_type.normalize(global, local);
-                    let mut local = local.push(Entry::new(x.clone(), input_type.clone()));
-                    output_type.normalize(global, &mut local);
+                TermVariant::Product(binder, body) => {
+                    binder.ttype.normalize(global, local);
+                    let mut local = local.push(binder.clone().into());
+                    body.normalize(global, &mut local);
                 }
-                TermVariant::Abstract(x, input_type, body) => {
-                    input_type.normalize(global, local);
-                    let mut local = local.push(Entry::new(x.clone(), input_type.clone()));
+                TermVariant::Abstract(binder, body) => {
+                    binder.ttype.normalize(global, local);
+                    let mut local = local.push(binder.clone().into());
                     body.normalize(global, &mut local);
                 }
                 TermVariant::Bind(_name, _type, val, t) => {
@@ -391,14 +426,15 @@ impl<M: Clone, B: Clone> Term<M, B> {
                     *self = t.subst_single(0, val);
                     continue;
                 }
-                TermVariant::Match(t, name, ret, arms) => {
+                TermVariant::Match(t, name, ind, ret, arms) => {
                     t.normalize(global, local);
 
                     // ι reduction (Evaluate match expresions)
                     if let TermVariant::Const(constructor) = &*t.app_head().variant {
-                        if let Some(arm) =
-                            arms.iter_mut().find(|arm| arm.constructor == *constructor)
+                        if let GEntryRef::InductiveConstructor(_, j, _, _) =
+                            global.get_entry(constructor).unwrap()
                         {
+                            let arm = &mut arms[j];
                             let body = Term {
                                 meta: arm.body.meta.clone(),
                                 variant: Box::new(TermVariant::Sort(Sort::Prop)),
@@ -415,18 +451,18 @@ impl<M: Clone, B: Clone> Term<M, B> {
                         }
                     }
 
-                    let (i, params, bodies) = match global.get_entry(&ret.constructor) {
+                    let (i, params, bodies) = match global.get_entry(ind) {
                         Some(GEntryRef::Inductive(i, params, bodies)) => (i, params, bodies),
-                        Some(_) => panic!("{} is not an inductive type", ret.constructor),
-                        None => panic!("{} is not defined", ret.constructor),
+                        Some(_) => panic!("{ind} is not an inductive type"),
+                        None => panic!("{ind} is not defined"),
                     };
                     let body = &bodies[i];
 
                     let mut t_type = t.type_check(global, local).ok().unwrap();
                     t_type.normalize(global, local);
                     let (hd, mut args) = t_type.strip_args();
-                    if !hd.is_const(&ret.constructor) {
-                        panic!("{i} is not the inductive type {}", ret.constructor)
+                    if !hd.is_const(ind) {
+                        panic!("{i} is not the inductive type {ind}")
                     }
                     args.truncate(params.len());
 
@@ -452,7 +488,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                             .fold(
                                 Term {
                                     meta: self.meta.clone(),
-                                    variant: Box::new(TermVariant::Const(ret.constructor.clone())),
+                                    variant: Box::new(TermVariant::Const(ind.clone())),
                                 },
                                 |f, v| Term {
                                     meta: self.meta.clone(),
@@ -463,15 +499,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                         ret.body.normalize(global, &mut local);
                     }
 
-                    for arm in arms {
-                        let constructor = if let Some(c) =
-                            body.constructors.iter().find(|c| c.name == arm.constructor)
-                        {
-                            c
-                        } else {
-                            panic!("{} is not a constructor of {}", arm.constructor, body.name)
-                        };
-
+                    for (arm, constructor) in arms.iter_mut().zip(&body.constructors) {
                         let mut local = local.slot();
                         local.extend(arm.params.iter().zip(params).zip(&args).enumerate().map(
                             |(i, ((x, param), value))| {
@@ -487,6 +515,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                         arm.body.normalize(global, &mut local);
                     }
                 }
+                TermVariant::Fix(_, _) => todo!(),
             }
             break;
         }
@@ -501,25 +530,26 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 f.eta();
                 v.eta();
             }
-            TermVariant::Product(_, input_type, output_type) => {
-                input_type.eta();
-                output_type.eta();
+            TermVariant::Product(binder, body) => {
+                binder.ttype.eta();
+                body.eta();
             }
-            TermVariant::Abstract(_, input_type, body) => {
-                input_type.eta();
+            TermVariant::Abstract(binder, body) => {
+                binder.ttype.eta();
                 body.eta();
             }
             TermVariant::Bind(_, _, _, _) => unreachable!(),
-            TermVariant::Match(t, _, ret, arms) => {
+            TermVariant::Match(t, _, _, ret, arms) => {
                 t.eta();
                 ret.body.eta();
                 for arm in arms {
                     arm.body.eta();
                 }
             }
+            TermVariant::Fix(_, _) => todo!(),
         }
 
-        if let TermVariant::Abstract(_, _, body) = &*self.variant {
+        if let TermVariant::Abstract(_, body) = &*self.variant {
             if let TermVariant::App(f, v) = &*body.variant {
                 if let TermVariant::Var(0) = &*v.variant {
                     if let Some(f) = f.pop(0) {
@@ -555,7 +585,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
     fn subtype_inner(&self, other: &Self) -> bool {
         match (&*self.variant, &*other.variant) {
             (TermVariant::Sort(l), TermVariant::Sort(r)) => l <= r,
-            (TermVariant::Product(_, l0, l1), TermVariant::Product(_, r0, r1)) => {
+            (TermVariant::Product(l0, l1), TermVariant::Product(r0, r1)) => {
                 l0 == r0 && l1.subtype_inner(r1)
             }
             (l, r) => l == r,
@@ -588,8 +618,8 @@ impl<M: Clone, B: Clone> Term<M, B> {
     /// If the input is not a product, it is returned unchanged.
     pub fn strip_products(mut self) -> (Vec<Binder<M, B>>, Self) {
         let mut arity = Vec::new();
-        while let TermVariant::Product(x, ttype, body) = *self.variant {
-            arity.push(Binder { x, ttype });
+        while let TermVariant::Product(binder, body) = *self.variant {
+            arity.push(binder);
             self = body
         }
         (arity, self)
@@ -649,10 +679,10 @@ impl<M: Clone, B: Clone> Term<M, B> {
         mut self,
         global: &Global<M, B>,
         local: &mut Stack<Entry<M, B>>,
-    ) -> Result<(Self, Self), TypeError<M, B>> {
+    ) -> Result<(Binder<M, B>, Self), TypeError<M, B>> {
         self.normalize(global, local);
-        if let TermVariant::Product(_, input_type, output_type) = *self.variant {
-            Ok((input_type, output_type))
+        if let TermVariant::Product(binder, body) = *self.variant {
+            Ok((binder, body))
         } else {
             Err(TypeError::new(local, TypeErrorVariant::NotAProduct(self)))
         }
@@ -699,20 +729,20 @@ impl<M: Clone, B: Clone> Term<M, B> {
             }
             TermVariant::App(f, v) => {
                 let f_tp = f.type_check(global, local)?;
-                let (input_type, output_type) = f_tp
+                let (binder, body) = f_tp
                     .expect_product(global, local)
                     .map_err(|err| (f.meta.clone(), err))?;
                 let v_tp = v.type_check(global, local)?;
-                v_tp.expect_subtype(&input_type, global, local)
+                v_tp.expect_subtype(&binder.ttype, global, local)
                     .map_err(|err| (self.meta.clone(), err))?;
-                output_type.subst_single(0, v)
+                body.subst_single(0, v)
             }
-            TermVariant::Product(x, x_tp, t) => {
-                let x_sort = x_tp.type_check(global, local)?;
+            TermVariant::Product(binder, t) => {
+                let x_sort = binder.ttype.type_check(global, local)?;
                 let x_sort = x_sort
                     .expect_sort(global, local)
-                    .map_err(|err| (x_tp.meta.clone(), err))?;
-                let mut local = local.push(Entry::new(x.clone(), x_tp.clone()));
+                    .map_err(|err| (binder.ttype.meta.clone(), err))?;
+                let mut local = local.push(binder.clone().into());
                 let t_tp = t.type_check(global, &mut local)?;
                 let t_sort = t_tp
                     .expect_sort(global, &mut local)
@@ -722,16 +752,17 @@ impl<M: Clone, B: Clone> Term<M, B> {
                     variant: Box::new(TermVariant::Sort(x_sort.product(t_sort))),
                 }
             }
-            TermVariant::Abstract(x, x_tp, t) => {
-                let x_sort = x_tp.type_check(global, local)?;
+            TermVariant::Abstract(binder, t) => {
+                let x_sort = binder.ttype.type_check(global, local)?;
                 x_sort
                     .expect_sort(global, local)
-                    .map_err(|err| (x_tp.meta.clone(), err))?;
-                let mut local = local.push(Entry::new(x.clone(), x_tp.clone()));
+                    .map_err(|err| (binder.ttype.meta.clone(), err))?;
+                let mut local = local.push(binder.clone().into());
                 let t_tp = t.type_check(global, &mut local)?;
+                let binder = local.pop().next().unwrap().into();
                 Term {
                     meta: self.meta.clone(),
-                    variant: Box::new(TermVariant::Product(x.clone(), x_tp.clone(), t_tp)),
+                    variant: Box::new(TermVariant::Product(binder, t_tp)),
                 }
             }
             TermVariant::Bind(x, x_tp, x_val, t) => {
@@ -747,25 +778,22 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 let mut local = local.push(Entry::new(x.clone(), x_tp.clone()));
                 t_subst.type_check(global, &mut local)?
             }
-            TermVariant::Match(t, name, ret, arms) => {
-                let (params, body) = match global.get_entry(&ret.constructor) {
+            TermVariant::Match(t, name, ind, ret, arms) => {
+                let (params, body) = match global.get_entry(ind) {
                     Some(GEntryRef::Inductive(i, params, bodies)) => (params, &bodies[i]),
                     Some(_) => {
                         return Err((
                             ret.meta.clone(),
                             TypeError::new(
                                 local,
-                                TypeErrorVariant::NotAnInductiveType(ret.constructor.clone()),
+                                TypeErrorVariant::NotAnInductiveType(ind.clone()),
                             ),
                         ))
                     }
                     None => {
                         return Err((
                             ret.meta.clone(),
-                            TypeError::new(
-                                local,
-                                TypeErrorVariant::UndefinedConst(ret.constructor.clone()),
-                            ),
+                            TypeError::new(local, TypeErrorVariant::UndefinedConst(ind.clone())),
                         ))
                     }
                 };
@@ -787,15 +815,12 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 norm.normalize(global, local);
                 let (hd, mut args) = norm.strip_args();
                 // Ensure the type of `t` is of the same inductive type that we want to match on
-                if !hd.is_const(&ret.constructor) {
+                if !hd.is_const(ind) {
                     return Err((
                         t.meta.clone(),
                         TypeError::new(
                             local,
-                            TypeErrorVariant::NotOfExpectedInducitve(
-                                ret.constructor.clone(),
-                                t_type,
-                            ),
+                            TypeErrorVariant::NotOfExpectedInducitve(ind.clone(), t_type),
                         ),
                     ));
                 };
@@ -824,7 +849,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                         .fold(
                             Term {
                                 meta: self.meta.clone(),
-                                variant: Box::new(TermVariant::Const(ret.constructor.clone())),
+                                variant: Box::new(TermVariant::Const(ind.clone())),
                             },
                             |f, v| Term {
                                 meta: self.meta.clone(),
@@ -854,44 +879,20 @@ impl<M: Clone, B: Clone> Term<M, B> {
                     }
                 };
 
-                let mut constrs = vec![false; body.constructors.len()];
-                for arm in arms {
-                    let constructor = if let Some((i, constructor)) = body
-                        .constructors
-                        .iter()
-                        .enumerate()
-                        .find(|(_, c)| c.name == arm.constructor)
-                    {
-                        if constrs[i] {
-                            return Err((
-                                arm.meta.clone(),
-                                TypeError::new(
-                                    local,
-                                    TypeErrorVariant::DupplicateConstructor(
-                                        arm.constructor.clone(),
-                                    ),
-                                ),
-                            ));
-                        }
-                        constrs[i] = true;
-                        constructor
-                    } else {
-                        return Err((
-                            arm.meta.clone(),
-                            TypeError::new(
-                                local,
-                                TypeErrorVariant::NotAConstructor(
-                                    body.name.clone(),
-                                    arm.constructor.clone(),
-                                    body.constructors
-                                        .iter()
-                                        .map(|constructor| constructor.name.clone())
-                                        .collect(),
-                                ),
+                if arms.len() != body.constructors.len() {
+                    return Err((
+                        self.meta.clone(),
+                        TypeError::new(
+                            local,
+                            TypeErrorVariant::IncorrectConstructorCount(
+                                body.constructors.len(),
+                                arms.len(),
                             ),
-                        ));
-                    };
+                        ),
+                    ));
+                }
 
+                for (arm, constructor) in arms.iter().zip(&body.constructors) {
                     if arm.params.len() != params.len() + constructor.arity.len() {
                         return Err((
                             arm.meta.clone(),
@@ -928,7 +929,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
                         .fold(
                             Term {
                                 meta: self.meta.clone(),
-                                variant: Box::new(TermVariant::Const(arm.constructor.clone())),
+                                variant: Box::new(TermVariant::Const(constructor.name.clone())),
                             },
                             |f, v| Term {
                                 meta: self.meta.clone(),
@@ -952,23 +953,6 @@ impl<M: Clone, B: Clone> Term<M, B> {
                         .map_err(|err| (arm.body.meta.clone(), err))?;
                 }
 
-                if !constrs.iter().all(|b| *b) {
-                    return Err((
-                        self.meta.clone(),
-                        TypeError::new(
-                            local,
-                            TypeErrorVariant::MissingConstructors(
-                                body.constructors
-                                    .iter()
-                                    .zip(constrs)
-                                    .filter(|(_, b)| !b)
-                                    .map(|(constructor, _)| constructor.name.clone())
-                                    .collect(),
-                            ),
-                        ),
-                    ));
-                }
-
                 ret.body
                     .subst_many(0, args.len() + arity_args.len() + 1, |i| {
                         if i < args.len() {
@@ -979,6 +963,44 @@ impl<M: Clone, B: Clone> Term<M, B> {
                             t
                         }
                     })
+            }
+            TermVariant::Fix(decls, sel) => {
+                let mut decl_binders = decls
+                    .iter()
+                    .map(|decl| Binder {
+                        x: decl.name.clone(),
+                        ttype: decl.params.iter().rev().fold(
+                            decl.ttype.clone(),
+                            |ttype, binder| Term {
+                                meta: ttype.meta.clone(),
+                                variant: Box::new(TermVariant::Product(binder.clone(), ttype)),
+                            },
+                        ),
+                    })
+                    .collect::<Vec<_>>();
+
+                for decl_binder in &decl_binders {
+                    decl_binder
+                        .ttype
+                        .type_check(global, local)?
+                        .expect_sort(global, local)
+                        .map_err(|err| (decl_binder.ttype.meta.clone(), err))?;
+                }
+
+                for decl in decls {
+                    let mut local = local.slot();
+                    local.extend(decl.params.iter().cloned().map(Entry::from));
+                    local.extend(decl_binders.iter().enumerate().map(|(i, binder)| {
+                        Entry::new(binder.x.clone(), binder.ttype.push(decl.params.len() + i))
+                    }));
+                    let expected = decl.ttype.push(decls.len());
+                    let actual = decl.body.type_check(global, &mut local)?;
+                    actual
+                        .expect_subtype(&expected, global, &mut local)
+                        .map_err(|err| (decl.body.meta.clone(), err))?;
+                }
+
+                decl_binders.swap_remove(*sel).ttype
             }
         })
     }

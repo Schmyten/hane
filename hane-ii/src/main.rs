@@ -1,13 +1,13 @@
 use hane_kernel::Global;
 use hane_syntax::{
     eval::EvalError,
-    lower::LoweringError,
+    lower::{LoweringEntry, LoweringError},
     parser::{parse, ParseError},
     print::Print,
     Ident, Span, SpanError,
 };
 use std::{
-    collections::HashSet,
+    collections::HashMap,
     fmt::{self, Display, Formatter},
     io::stdin,
 };
@@ -16,7 +16,7 @@ enum Error<'a> {
     ParseError(Option<&'a str>, &'a str, ParseError),
     SingleCommand,
     LoweringError(Option<&'a str>, &'a str, SpanError<LoweringError>),
-    EvalError(Option<&'a str>, &'a str, SpanError<EvalError>),
+    EvalError(Option<&'a str>, &'a str, SpanError<EvalError<'a>>),
 }
 
 impl<'a> From<(Option<&'a str>, &'a str, ParseError)> for Error<'a> {
@@ -31,8 +31,8 @@ impl<'a> From<(Option<&'a str>, &'a str, SpanError<LoweringError>)> for Error<'a
     }
 }
 
-impl<'a> From<(Option<&'a str>, &'a str, SpanError<EvalError>)> for Error<'a> {
-    fn from((input, path, err): (Option<&'a str>, &'a str, SpanError<EvalError>)) -> Error<'a> {
+impl<'a> From<(Option<&'a str>, &'a str, SpanError<EvalError<'a>>)> for Error<'a> {
+    fn from((input, path, err): (Option<&'a str>, &'a str, SpanError<EvalError<'a>>)) -> Error<'a> {
         Error::EvalError(input, path, err)
     }
 }
@@ -49,7 +49,7 @@ impl<'a> Display for Error<'a> {
 }
 
 fn main() {
-    let mut names = HashSet::new();
+    let mut names = HashMap::new();
     let mut global = Global::new();
 
     for line in stdin().lines() {
@@ -63,8 +63,8 @@ fn main() {
 
 fn eval_line<'a>(
     line: &'a str,
-    names: &mut HashSet<String>,
-    global: &mut Global<Span, Ident>,
+    names: &mut HashMap<String, LoweringEntry>,
+    global: &'a mut Global<Span, Ident>,
 ) -> Result<(), Error<'a>> {
     let mut commands = parse(&line).map_err(|err| (None, line, err))?;
 
@@ -76,14 +76,14 @@ fn eval_line<'a>(
     let command = command.lower(names).map_err(|err| (None, line, err))?;
 
     command
-        .eval(global, |out| print!("{}", Print(out)))
+        .eval(global, |global, out| print!("{}", Print((global, out))))
         .map_err(|(span, err)| {
             (
                 None,
                 line,
                 SpanError {
                     span,
-                    err: EvalError(err),
+                    err: EvalError(global, err),
                 },
             )
         })?;

@@ -10,25 +10,28 @@ use hane_kernel::{
 
 use crate::Ident;
 
-type Term<M> = hane_kernel::term::Term<M, Ident>;
+type Global<M> = hane_kernel::Global<M, Ident>;
+type Term<M> = hane_kernel::Term<M, Ident>;
 
 pub struct Print<T>(pub T);
 
-impl<'a, M> Display for Print<CommandOut<'a, M, Ident>> {
+impl<'a, M: Clone> Display
+    for Print<(&'a hane_kernel::Global<M, Ident>, CommandOut<'a, M, Ident>)>
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut names = Stack::new();
-        match &self.0 {
+        match &self.0 .1 {
             CommandOut::Entry(entry) => match *entry {
                 GEntryRef::Definition(name, ttype, val) => {
                     write!(f, "{name} = ")?;
-                    write_term(f, val, &mut names, 200)?;
+                    write_term(f, val, self.0 .0, &mut names, 200)?;
                     write!(f, "\n\t : ")?;
-                    write_term(f, ttype, &mut names, 200)?;
+                    write_term(f, ttype, self.0 .0, &mut names, 200)?;
                     writeln!(f)
                 }
                 GEntryRef::Axiom(name, ttype) => {
                     write!(f, "*** [ {name} : ")?;
-                    write_term(f, ttype, &mut names, 200)?;
+                    write_term(f, ttype, self.0 .0, &mut names, 200)?;
                     writeln!(f, " ]")
                 }
                 GEntryRef::Inductive(_, params, bodies)
@@ -40,27 +43,27 @@ impl<'a, M> Display for Print<CommandOut<'a, M, Ident>> {
                         let mut names = names.slot();
                         for param in params {
                             write!(f, " ({} : ", param.x.name)?;
-                            write_term(f, &param.ttype, &mut names, 200)?;
+                            write_term(f, &param.ttype, self.0 .0, &mut names, 200)?;
                             write!(f, ")")?;
                             names.push_onto(param.x.clone());
                         }
 
                         write!(f, " : ")?;
-                        write_term(f, &body.arity_type, &mut names, 200)?;
+                        write_term(f, &body.arity_type, self.0 .0, &mut names, 200)?;
                         write!(f, " :=")?;
 
                         let mut sep = " ";
                         for constructor in &body.constructors {
                             write!(f, "\n  {sep} {} : ", constructor.name)?;
                             sep = "|";
-                            write_term(f, &constructor.arity_type, &mut names, 200)?;
+                            write_term(f, &constructor.arity_type, self.0 .0, &mut names, 200)?;
                         }
                     }
                     writeln!(f, ".")
                 }
             },
             CommandOut::Term(term) => {
-                write_term(f, term, &mut names, 200)?;
+                write_term(f, term, self.0 .0, &mut names, 200)?;
                 writeln!(f)
             }
         }
@@ -85,9 +88,10 @@ fn fresh(x: &Ident, names: &Stack<Ident>) -> Ident {
     unreachable!()
 }
 
-pub fn write_term<M>(
+pub fn write_term<M: Clone>(
     buf: &mut impl Write,
     term: &Term<M>,
+    global: &Global<M>,
     names: &mut Stack<Ident>,
     level: usize,
 ) -> fmt::Result {
@@ -105,42 +109,42 @@ pub fn write_term<M>(
             if level < 10 {
                 write!(buf, "(")?;
             }
-            write_term(buf, f, names, 10)?;
+            write_term(buf, f, global, names, 10)?;
             write!(buf, " ")?;
-            write_term(buf, v, names, 9)?;
+            write_term(buf, v, global, names, 9)?;
             if level < 10 {
                 write!(buf, ")")?;
             }
             Ok(())
         }
-        TermVariant::Product(x, x_tp, t) => {
-            let x = fresh(x, names);
+        TermVariant::Product(binder, body) => {
+            let x = fresh(&binder.x, names);
             if level < 200 {
                 write!(buf, "(")?;
             }
             write!(buf, "forall {} : ", x.name)?;
-            write_term(buf, x_tp, names, 200)?;
+            write_term(buf, &binder.ttype, global, names, 200)?;
             write!(buf, ", ")?;
             {
                 let mut names = names.push(x);
-                write_term(buf, t, &mut names, 200)?
+                write_term(buf, body, global, &mut names, 200)?
             }
             if level < 200 {
                 write!(buf, ")")?;
             }
             Ok(())
         }
-        TermVariant::Abstract(x, x_tp, t) => {
-            let x = fresh(x, names);
+        TermVariant::Abstract(binder, t) => {
+            let x = fresh(&binder.x, names);
             if level < 200 {
                 write!(buf, "(")?;
             }
             write!(buf, "fun {} : ", x.name)?;
-            write_term(buf, x_tp, names, 200)?;
+            write_term(buf, &binder.ttype, global, names, 200)?;
             write!(buf, " => ")?;
             {
                 let mut names = names.push(x);
-                write_term(buf, t, &mut names, 200)?
+                write_term(buf, t, global, &mut names, 200)?
             }
             if level < 200 {
                 write!(buf, ")")?;
@@ -153,24 +157,30 @@ pub fn write_term<M>(
                 write!(buf, "(")?;
             }
             write!(buf, "let {} : ", x.name)?;
-            write_term(buf, x_tp, names, 200)?;
+            write_term(buf, x_tp, global, names, 200)?;
             write!(buf, " := ")?;
-            write_term(buf, x_val, names, 200)?;
+            write_term(buf, x_val, global, names, 200)?;
             write!(buf, " in ")?;
             {
                 let mut names = names.push(x);
-                write_term(buf, t, &mut names, 200)?
+                write_term(buf, t, global, &mut names, 200)?
             }
             if level < 200 {
                 write!(buf, ")")?;
             }
             Ok(())
         }
-        TermVariant::Match(t, name, ret, arms) => {
+        TermVariant::Match(t, name, ind, ret, arms) => {
             write!(buf, "match ")?;
-            write_term(buf, t, names, 200)?;
+            write_term(buf, t, global, names, 200)?;
             let mut name = fresh(name, names);
-            write!(buf, " as {} in {}", name.name, ret.constructor)?;
+            write!(buf, " as {} in {}", name.name, ind)?;
+            let constructors =
+                if let GEntryRef::Inductive(i, _, bodies) = global.get_entry(ind).unwrap() {
+                    &*bodies[i].constructors
+                } else {
+                    panic!()
+                };
             {
                 let mut names = names.slot();
                 for x in &ret.params {
@@ -182,13 +192,13 @@ pub fn write_term<M>(
                 }
                 write!(buf, " return ")?;
                 let mut names = names.push(name);
-                write_term(buf, term, &mut names, 200)?;
+                write_term(buf, term, global, &mut names, 200)?;
                 name = names.pop().next().unwrap();
             }
             write!(buf, " with")?;
             let mut sep = "";
-            for arm in arms {
-                write!(buf, "{sep} {}", arm.constructor)?;
+            for (arm, constructor) in arms.iter().zip(constructors) {
+                write!(buf, "{sep} {}", constructor.name)?;
                 sep = " |";
                 let mut names = names.slot();
                 for x in &arm.params {
@@ -200,33 +210,40 @@ pub fn write_term<M>(
                 }
                 write!(buf, " => ")?;
                 let mut names = names.push(name);
-                write_term(buf, term, &mut names, 200)?;
+                write_term(buf, term, global, &mut names, 200)?;
                 name = names.pop().next().unwrap();
             }
             write!(buf, " end")
         }
+        TermVariant::Fix(_, _) => todo!(),
     }
 }
 
-pub fn print_term<M>(term: &Term<M>, names: &mut Stack<Ident>, level: usize) -> String {
+pub fn print_term<M: Clone>(
+    term: &Term<M>,
+    global: &Global<M>,
+    names: &mut Stack<Ident>,
+    level: usize,
+) -> String {
     let mut buf = String::new();
-    write_term(&mut buf, term, names, level).unwrap();
+    write_term(&mut buf, term, global, names, level).unwrap();
     buf
 }
 
-pub fn write_local<'a, M>(
+pub fn write_local<'a, M: Clone>(
     buf: &mut impl Write,
     local: &Stack<Entry<M, Ident>>,
+    global: &Global<M>,
     names: &'a mut Stack<Ident>,
 ) -> Result<StackSlot<'a, Ident>, fmt::Error> {
     let mut names = names.slot();
     for entry in local.iter().rev() {
         let x = fresh(&entry.x, &names);
         write!(buf, "{}: ", x.name)?;
-        write_term(buf, &entry.ttype, &mut names, 200)?;
+        write_term(buf, &entry.ttype, global, &mut names, 200)?;
         if let Some(value) = &entry.value {
             write!(buf, " := ")?;
-            write_term(buf, value, &mut names, 200)?;
+            write_term(buf, value, global, &mut names, 200)?;
         }
         writeln!(buf)?;
         names.push_onto(x);

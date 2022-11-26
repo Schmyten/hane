@@ -128,7 +128,7 @@ impl<M: Clone, B: Clone> Global<M, B> {
     }
 
     /// Returns a reference to the entry containing the constant `name` along with where inside the entry `name` was found.
-    pub(crate) fn get_entry(&self, name: &str) -> Option<GEntryRef<M, B>> {
+    pub fn get_entry(&self, name: &str) -> Option<GEntryRef<M, B>> {
         self.env.iter().find_map(|(_, entry)| match entry {
             GEntry::Definition(x, ttype, val) => {
                 (x == name).then_some(GEntryRef::Definition(x, ttype, val))
@@ -223,7 +223,7 @@ impl<M: Clone, B: Clone> Command<M, B> {
     pub fn eval(
         self,
         global: &mut Global<M, B>,
-        mut out: impl FnMut(CommandOut<M, B>),
+        mut out: impl FnMut(&Global<M, B>, CommandOut<M, B>),
     ) -> Result<(), (M, CommandError<M, B>)> {
         match self.variant {
             CommandVariant::Definition(name, ttype, value) => {
@@ -333,7 +333,7 @@ impl<M: Clone, B: Clone> Command<M, B> {
                             .rev()
                             .fold(body.ttype.clone(), |body, param| Term {
                                 meta: body.meta.clone(),
-                                variant: Box::new(TermVariant::Product(param.x, param.ttype, body)),
+                                variant: Box::new(TermVariant::Product(param, body)),
                             });
 
                     ind_bodies.push(GIndBody {
@@ -389,11 +389,7 @@ impl<M: Clone, B: Clone> Command<M, B> {
                                 constructor.ttype.clone(),
                                 |body, binder| Term {
                                     meta: body.meta.clone(),
-                                    variant: Box::new(TermVariant::Product(
-                                        binder.x,
-                                        binder.ttype,
-                                        body,
-                                    )),
+                                    variant: Box::new(TermVariant::Product(binder, body)),
                                 },
                             );
 
@@ -442,7 +438,7 @@ impl<M: Clone, B: Clone> Command<M, B> {
             }
             CommandVariant::Print(name) => {
                 match global.get_entry(&name) {
-                    Some(entry) => out(CommandOut::Entry(entry)),
+                    Some(entry) => out(global, CommandOut::Entry(entry)),
                     None => {
                         return Err((
                             self.meta,
@@ -459,14 +455,14 @@ impl<M: Clone, B: Clone> Command<M, B> {
                 let ttype = term
                     .type_check(global, &mut local)
                     .map_err(|(meta, err)| (meta, CommandError::TypeError(err)))?;
-                out(CommandOut::Term(&ttype))
+                out(global, CommandOut::Term(&ttype))
             }
             CommandVariant::Compute(mut term) => {
                 let mut local = Stack::new();
                 term.type_check(global, &mut local)
                     .map_err(|(meta, err)| (meta, CommandError::TypeError(err)))?;
                 term.normalize(global, &mut local);
-                out(CommandOut::Term(&term))
+                out(global, CommandOut::Term(&term))
             }
         }
         Ok(())

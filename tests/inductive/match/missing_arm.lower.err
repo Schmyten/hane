@@ -1,0 +1,6 @@
+ --> tests/inductive/match/missing_arm.v:3:5
+  |
+3 |     match I as _ in True return True with end.
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = Missing the constructors: I

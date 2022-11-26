@@ -1,0 +1,4 @@
+Inductive nat : Set :=
+    | O : nat
+    | S : forall[nat] (nat).
+Definition add : forall[nat] (forall[nat] (nat)) := fix[nat, nat]{struct 0} : nat := match '2 in nat return nat with '1 | (S) ((('1) ('0)) ('2)) end for 0.

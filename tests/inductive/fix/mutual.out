@@ -1,0 +1,6 @@
+Inductive tree (Set) : Set :=
+    | Node : forall['0] (forall[(forest) ('1)] ((tree) ('2)))
+    with forest (Set) : Set :=
+    | Nil : (forest) ('0)
+    | Cons : forall[(tree) ('0)] (forall[(forest) ('1)] ((forest) ('2))).
+Definition map : forall[Set] (forall[Set] (forall[forall['1] ('1)] (forall[(tree) ('2)] ((tree) ('2))))) := fix[Set, Set, forall['1] ('1), (tree) ('2)]{struct 3} : (tree) ('2) := match '2 in tree return (tree) ('6) with (((Node) ('7)) (('6) ('1))) ((((('3) ('8)) ('7)) ('6)) ('0)) end with[Set, Set, forall['1] ('1), (forest) ('2)]{struct 3} : (forest) ('2) := match '2 in forest return (forest) ('6) with (Nil) ('5) | (((Cons) ('7)) ((((('4) ('8)) ('7)) ('6)) ('1))) ((((('3) ('8)) ('7)) ('6)) ('0)) end for 0.

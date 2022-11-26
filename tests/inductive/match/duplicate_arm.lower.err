@@ -1,0 +1,6 @@
+ --> tests/inductive/match/duplicate_arm.v:5:7
+  |
+5 |     | I => I
+  |       ^
+  |
+  = The constructor I was previously covered

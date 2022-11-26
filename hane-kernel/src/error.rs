@@ -19,12 +19,10 @@ pub enum TypeErrorVariant<M, B> {
     NotAProduct(Term<M, B>),
     NotASort(Term<M, B>),
     NotAnInductiveType(String),
-    NotAConstructor(String, String, Vec<String>),
     IncorrectParameterCount(usize, usize),
+    IncorrectConstructorCount(usize, usize),
     NotOfExpectedInducitve(String, Term<M, B>),
     DisallowedEleminationSort(Sort, Sort),
-    DupplicateConstructor(String),
-    MissingConstructors(Vec<String>),
     DebruijnOutOfScope(usize),
     UndefinedConst(String),
 }

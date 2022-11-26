@@ -3,7 +3,7 @@ use hane_syntax::eval::EvalError;
 use hane_syntax::parser::parse;
 use hane_syntax::print::Print;
 use hane_syntax::SpanError;
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::fmt::Write;
 use std::fs::read_to_string;
 
@@ -73,7 +73,7 @@ fn main() {
             }
         };
 
-        let mut global = HashSet::new();
+        let mut global = HashMap::new();
         let lower = commands
             .into_iter()
             .map(|command| command.lower(&mut global))
@@ -156,8 +156,8 @@ fn main() {
         let mut global = Global::new();
         let mut out_buf = String::new();
         let result = commands.into_iter().try_for_each(|command| {
-            command.eval(&mut global, |out| {
-                write!(out_buf, "{}", Print(out)).unwrap()
+            command.eval(&mut global, |global, out| {
+                write!(out_buf, "{}", Print((global, out))).unwrap()
             })
         });
 
@@ -179,7 +179,7 @@ fn main() {
                 Err((span, err)) => {
                     let err = SpanError {
                         span,
-                        err: EvalError(err),
+                        err: EvalError(&global, err),
                     }
                     .print(Some(path.to_string_lossy().as_ref()), &content);
                     if err != result_err {
@@ -210,7 +210,7 @@ fn main() {
         if let Err((span, err)) = result {
             let err = SpanError {
                 span,
-                err: EvalError(err),
+                err: EvalError(&global, err),
             }
             .print(Some(path.to_string_lossy().as_ref()), &content);
             eprintln!("{name}: Failed with error:");
