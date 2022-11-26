@@ -232,6 +232,23 @@ impl Command {
                     })?;
                 lowered::CommandVariant::Inductive(params, lowered_bodies)
             }
+            CommandVariant::Print(ident) => {
+                if !global.contains_key(&ident.name) {
+                    return Err(SpanError {
+                        span: ident.span,
+                        err: LoweringError::UnknownVariable(ident.name),
+                    });
+                }
+                lowered::CommandVariant::Print(ident.name)
+            }
+            CommandVariant::Check(expr) => {
+                let term = expr.lower(global, &mut names)?;
+                lowered::CommandVariant::Check(term)
+            }
+            CommandVariant::Compute(expr) => {
+                let term = expr.lower(global, &mut names)?;
+                lowered::CommandVariant::Compute(term)
+            }
         };
         Ok(lowered::Command {
             meta: self.span,

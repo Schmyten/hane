@@ -1,0 +1,2 @@
+Axiom ax : forall[Set] ('0).
+Print ax.

@@ -1,10 +1,13 @@
 commands = _{ SOI ~ command* ~ EOI }
-command = _{ command_definition | command_axiom | command_inductive }
+command = _{ command_definition | command_axiom | command_inductive | command_print | command_check | command_compute }
 command_definition = {
     keyword_definition ~ ident ~ binders ~ ":" ~ expr ~ ":=" ~ expr ~ "."
 }
 command_axiom = { keyword_axiom ~ ident ~ ":" ~ expr ~ "." }
 command_inductive = { keyword_inductive ~ inductive_body ~ (keyword_with ~ inductive_body)* ~ "." }
+command_print = { keyword_print ~ ident ~ "." }
+command_check = { keyword_check ~ expr ~ "." }
+command_compute = { keyword_compute ~ expr ~ "." }
 
 inductive_body = { ident ~ binders ~ ":" ~ expr ~ ":=" ~ inductive_constructors }
 inductive_constructors = { inductive_constructor? ~ ("|" ~ inductive_constructor)* }
@@ -50,6 +53,9 @@ keyword = _{
     keyword_definition
    | keyword_axiom
    | keyword_inductive
+   | keyword_print
+   | keyword_check
+   | keyword_compute
    | keyword_with
    | keyword_prop
    | keyword_set
@@ -69,6 +75,9 @@ keyword = _{
 keyword_definition = @{ "Definition" ~ !(ASCII_ALPHANUMERIC | "_") }
 keyword_axiom = @{ "Axiom" ~ !(ASCII_ALPHANUMERIC | "_") }
 keyword_inductive = @{ "Inductive" ~ !(ASCII_ALPHANUMERIC | "_") }
+keyword_print = @{ "Print" ~ !(ASCII_ALPHANUMERIC | "_") }
+keyword_check = @{ "Check" ~ !(ASCII_ALPHANUMERIC | "_") }
+keyword_compute = @{ "Compute" ~ !(ASCII_ALPHANUMERIC | "_") }
 keyword_with = @{ "with" ~ !(ASCII_ALPHANUMERIC | "_") }
 keyword_prop = @{ "Prop" ~ !(ASCII_ALPHANUMERIC | "_") }
 keyword_set = @{ "Set" ~ !(ASCII_ALPHANUMERIC | "_") }

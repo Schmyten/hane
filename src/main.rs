@@ -1,8 +1,10 @@
 use hane_kernel::global::Global;
 use hane_syntax::eval::EvalError;
 use hane_syntax::parser::parse;
+use hane_syntax::print::Print;
 use hane_syntax::SpanError;
 use std::collections::HashMap;
+use std::fmt::Write;
 use std::fs::read_to_string;
 
 fn main() {
@@ -44,7 +46,7 @@ fn main() {
                     continue;
                 }
                 Err(err) => {
-                    let err = err.print(path.to_string_lossy().as_ref(), &content);
+                    let err = err.print(Some(path.to_string_lossy().as_ref()), &content);
                     if err != parse_err {
                         eprintln!("{name}: Parsing error does not match expected error");
                         eprintln!("expected:");
@@ -63,7 +65,7 @@ fn main() {
         let commands = match parse_result {
             Ok(commands) => commands,
             Err(err) => {
-                let err = err.print(path.to_string_lossy().as_ref(), &content);
+                let err = err.print(Some(path.to_string_lossy().as_ref()), &content);
                 eprintln!("{name}: Failed to parse expresion");
                 eprintln!("```\n{err}\n```");
                 failed += 1;
@@ -95,7 +97,7 @@ fn main() {
                     continue;
                 }
                 Err(err) => {
-                    let err = err.print(path.to_string_lossy().as_ref(), &content);
+                    let err = err.print(Some(path.to_string_lossy().as_ref()), &content);
                     if err != lower_err {
                         eprintln!("{name}: Lowering error does not match expected error");
                         eprintln!("expected:");
@@ -124,7 +126,7 @@ fn main() {
         let commands = match lower {
             Ok(commands) => commands,
             Err(err) => {
-                let err = err.print(path.to_string_lossy().as_ref(), &content);
+                let err = err.print(Some(path.to_string_lossy().as_ref()), &content);
                 eprintln!("{name}: Lowering failed with error:");
                 eprintln!("```\n{err}\n```");
                 failed += 1;
@@ -134,7 +136,6 @@ fn main() {
 
         let lower_out = read_to_string(&lower_out).unwrap();
         let lower_print = {
-            use std::fmt::Write;
             let mut print = String::new();
             commands
                 .iter()
@@ -153,9 +154,12 @@ fn main() {
         }
 
         let mut global = Global::new();
-        let result = commands
-            .into_iter()
-            .try_for_each(|command| command.eval(&mut global));
+        let mut out_buf = String::new();
+        let result = commands.into_iter().try_for_each(|command| {
+            command.eval(&mut global, |global, out| {
+                write!(out_buf, "{}", Print((global, out))).unwrap()
+            })
+        });
 
         let result_err_path = {
             let mut path = path.to_path_buf();
@@ -177,7 +181,7 @@ fn main() {
                         span,
                         err: EvalError(&global, err),
                     }
-                    .print(path.to_string_lossy().as_ref(), &content);
+                    .print(Some(path.to_string_lossy().as_ref()), &content);
                     if err != result_err {
                         eprintln!("{name}: Error does not match expected error");
                         eprintln!("expected:");
@@ -208,7 +212,7 @@ fn main() {
                 span,
                 err: EvalError(&global, err),
             }
-            .print(path.to_string_lossy().as_ref(), &content);
+            .print(Some(path.to_string_lossy().as_ref()), &content);
             eprintln!("{name}: Failed with error:");
             eprintln!("```\n{err}\n```");
             failed += 1;

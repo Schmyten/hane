@@ -1,11 +1,72 @@
-use std::fmt::{self, Write};
+use std::fmt::{self, Display, Write};
 
-use hane_kernel::{entry::Entry, global::GEntryRef, stack::StackSlot, term::TermVariant, Stack};
+use hane_kernel::{
+    entry::Entry,
+    global::{CommandOut, GEntryRef},
+    stack::StackSlot,
+    term::TermVariant,
+    Stack,
+};
 
 use crate::Ident;
 
 type Global<M> = hane_kernel::Global<M, Ident>;
 type Term<M> = hane_kernel::Term<M, Ident>;
+
+pub struct Print<T>(pub T);
+
+impl<'a, M: Clone> Display for Print<(&'a hane_kernel::Global<M, Ident>, CommandOut<'a, M, Ident>)> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut names = Stack::new();
+        match &self.0.1 {
+            CommandOut::Entry(entry) => match *entry {
+                GEntryRef::Definition(name, ttype, val) => {
+                    write!(f, "{name} = ")?;
+                    write_term(f, val, &self.0.0, &mut names, 200)?;
+                    write!(f, "\n\t : ")?;
+                    write_term(f, ttype, &self.0.0, &mut names, 200)?;
+                    writeln!(f)
+                }
+                GEntryRef::Axiom(name, ttype) => {
+                    write!(f, "*** [ {name} : ")?;
+                    write_term(f, ttype, &self.0.0, &mut names, 200)?;
+                    writeln!(f, " ]")
+                }
+                GEntryRef::Inductive(_, params, bodies)
+                | GEntryRef::InductiveConstructor(_, _, params, bodies) => {
+                    let mut sep = "Inductive";
+                    for body in bodies {
+                        write!(f, "{sep} {}", body.name)?;
+                        sep = "\n  with";
+                        let mut names = names.slot();
+                        for param in params {
+                            write!(f, " ({} : ", param.x.name)?;
+                            write_term(f, &param.ttype, &self.0.0, &mut names, 200)?;
+                            write!(f, ")")?;
+                            names.push_onto(param.x.clone());
+                        }
+
+                        write!(f, " : ")?;
+                        write_term(f, &body.arity_type, &self.0.0, &mut names, 200)?;
+                        write!(f, " :=")?;
+
+                        let mut sep = " ";
+                        for constructor in &body.constructors {
+                            write!(f, "\n  {sep} {} : ", constructor.name)?;
+                            sep = "|";
+                            write_term(f, &constructor.arity_type, &self.0.0, &mut names, 200)?;
+                        }
+                    }
+                    writeln!(f, ".")
+                }
+            },
+            CommandOut::Term(term) => {
+                write_term(f, term, &self.0.0, &mut names, 200)?;
+                writeln!(f)
+            }
+        }
+    }
+}
 
 fn fresh(x: &Ident, names: &Stack<Ident>) -> Ident {
     if !names.contains(x) {
