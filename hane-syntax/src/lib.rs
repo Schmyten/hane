@@ -57,7 +57,7 @@ pub struct Command {
 }
 
 pub enum CommandVariant {
-    Definition(Ident, Expr, Expr),
+    Definition(Ident, Vec<Binder>, Expr, Expr),
     Axiom(Ident, Expr),
     Inductive(Vec<IndBody>),
 }

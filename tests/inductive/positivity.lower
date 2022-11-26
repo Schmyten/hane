@@ -1,0 +1,3 @@
+Inductive False : Prop :=.
+Inductive I : Prop :=
+    | not_I_I : forall[forall[I] (False)] (I).
