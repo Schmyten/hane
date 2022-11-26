@@ -24,14 +24,14 @@ impl<'a, M: Clone> Display
             CommandOut::Entry(entry) => match *entry {
                 GEntryRef::Definition(name, ttype, val) => {
                     write!(f, "{name} = ")?;
-                    write_term(f, val, &self.0 .0, &mut names, 200)?;
+                    write_term(f, val, self.0 .0, &mut names, 200)?;
                     write!(f, "\n\t : ")?;
-                    write_term(f, ttype, &self.0 .0, &mut names, 200)?;
+                    write_term(f, ttype, self.0 .0, &mut names, 200)?;
                     writeln!(f)
                 }
                 GEntryRef::Axiom(name, ttype) => {
                     write!(f, "*** [ {name} : ")?;
-                    write_term(f, ttype, &self.0 .0, &mut names, 200)?;
+                    write_term(f, ttype, self.0 .0, &mut names, 200)?;
                     writeln!(f, " ]")
                 }
                 GEntryRef::Inductive(_, params, bodies)
@@ -43,27 +43,27 @@ impl<'a, M: Clone> Display
                         let mut names = names.slot();
                         for param in params {
                             write!(f, " ({} : ", param.x.name)?;
-                            write_term(f, &param.ttype, &self.0 .0, &mut names, 200)?;
+                            write_term(f, &param.ttype, self.0 .0, &mut names, 200)?;
                             write!(f, ")")?;
                             names.push_onto(param.x.clone());
                         }
 
                         write!(f, " : ")?;
-                        write_term(f, &body.arity_type, &self.0 .0, &mut names, 200)?;
+                        write_term(f, &body.arity_type, self.0 .0, &mut names, 200)?;
                         write!(f, " :=")?;
 
                         let mut sep = " ";
                         for constructor in &body.constructors {
                             write!(f, "\n  {sep} {} : ", constructor.name)?;
                             sep = "|";
-                            write_term(f, &constructor.arity_type, &self.0 .0, &mut names, 200)?;
+                            write_term(f, &constructor.arity_type, self.0 .0, &mut names, 200)?;
                         }
                     }
                     writeln!(f, ".")
                 }
             },
             CommandOut::Term(term) => {
-                write_term(f, term, &self.0 .0, &mut names, 200)?;
+                write_term(f, term, self.0 .0, &mut names, 200)?;
                 writeln!(f)
             }
         }
