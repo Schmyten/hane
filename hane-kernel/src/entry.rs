@@ -64,6 +64,9 @@ impl<M, B> From<Binder<M, B>> for Entry<M, B> {
 
 impl<M, B> From<Entry<M, B>> for Binder<M, B> {
     fn from(entry: Entry<M, B>) -> Self {
-        Binder { x: entry.x, ttype: entry.ttype }
+        Binder {
+            x: entry.x,
+            ttype: entry.ttype,
+        }
     }
 }

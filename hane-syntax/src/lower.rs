@@ -96,20 +96,14 @@ impl Command {
                     .rev()
                     .fold(ttype, |ttype, binder| lowered::Term {
                         meta: ttype.meta.clone(),
-                        variant: Box::new(lowered::TermVariant::Product(
-                            binder,
-                            ttype,
-                        )),
+                        variant: Box::new(lowered::TermVariant::Product(binder, ttype)),
                     });
                 let value = lowered_params
                     .into_iter()
                     .rev()
                     .fold(value, |value, binder| lowered::Term {
                         meta: value.meta.clone(),
-                        variant: Box::new(lowered::TermVariant::Abstract(
-                            binder,
-                            value,
-                        )),
+                        variant: Box::new(lowered::TermVariant::Abstract(binder, value)),
                     });
                 global.insert(ident.name.clone(), LoweringEntry::Definition);
                 lowered::CommandVariant::Definition(ident.name, ttype, value)

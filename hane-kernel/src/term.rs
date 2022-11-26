@@ -254,13 +254,13 @@ impl<M: Clone, B: Clone> Term<M, B> {
                 arms.iter()
                     .try_for_each(|arm| arm.body.validate_consts_inner(f))
             }
-            TermVariant::Fix(decls, _) => {
-                decls.iter().try_for_each(|decl| {
-                    decl.params.iter().try_for_each(|param|param.ttype.validate_consts_inner(f))?;
-                    decl.ttype.validate_consts_inner(f)?;
-                    decl.body.validate_consts_inner(f)
-                })
-            },
+            TermVariant::Fix(decls, _) => decls.iter().try_for_each(|decl| {
+                decl.params
+                    .iter()
+                    .try_for_each(|param| param.ttype.validate_consts_inner(f))?;
+                decl.ttype.validate_consts_inner(f)?;
+                decl.body.validate_consts_inner(f)
+            }),
         }
     }
 
@@ -278,7 +278,8 @@ impl<M: Clone, B: Clone> Term<M, B> {
         f: &mut impl FnMut(&str) -> bool,
     ) -> bool {
         while let TermVariant::Product(binder, body) = &*self.variant {
-            if binder.ttype
+            if binder
+                .ttype
                 .validate_consts(|name| (!f(name)).then_some(()).ok_or(()))
                 .is_err()
             {

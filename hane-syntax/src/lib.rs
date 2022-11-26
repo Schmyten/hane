@@ -121,7 +121,7 @@ pub struct FixDecl {
     name: Ident,
     params: Vec<Binder>,
     anot: Ident,
-    ttype : Expr,
+    ttype: Expr,
     body: Expr,
 }
 

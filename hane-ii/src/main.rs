@@ -1,7 +1,7 @@
 use hane_kernel::Global;
 use hane_syntax::{
     eval::EvalError,
-    lower::{LoweringError, LoweringEntry},
+    lower::{LoweringEntry, LoweringError},
     parser::{parse, ParseError},
     print::Print,
     Ident, Span, SpanError,

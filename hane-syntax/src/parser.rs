@@ -1,6 +1,6 @@
 use crate::{
-    Binder, Command, CommandVariant, Expr, ExprVariant, Ident, IndBody, IndConstructor, Pattern,
-    Sort, Span, SpanError, FixDecl,
+    Binder, Command, CommandVariant, Expr, ExprVariant, FixDecl, Ident, IndBody, IndConstructor,
+    Pattern, Sort, Span, SpanError,
 };
 use pest::Parser;
 use pest_derive::Parser;
@@ -295,7 +295,7 @@ fn parse_pattern(pair: Pair) -> Pattern {
     }
 }
 
-fn parse_fix_decl(pair : Pair) -> FixDecl {
+fn parse_fix_decl(pair: Pair) -> FixDecl {
     debug_assert_eq!(pair.as_rule(), Rule::expr_fix_decl);
     let mut pairs = pair.into_inner();
     let name = parse_ident(pairs.next().unwrap());
@@ -304,5 +304,11 @@ fn parse_fix_decl(pair : Pair) -> FixDecl {
     let anot = parse_ident(pairs.next().unwrap());
     let ttype = parse_expr(pairs.next().unwrap());
     let body = parse_expr(pairs.next().unwrap());
-    FixDecl { name, params, anot, ttype, body }
+    FixDecl {
+        name,
+        params,
+        anot,
+        ttype,
+        body,
+    }
 }
