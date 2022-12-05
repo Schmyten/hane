@@ -68,11 +68,14 @@ fn eval_line<'a>(
 ) -> Result<(), Error<'a>> {
     let mut commands = parse(&line).map_err(|err| (None, line, err))?;
 
-    if commands.len() != 1 {
+    if commands.len() > 1 {
         return Err(Error::SingleCommand);
     }
 
-    let command = commands.pop().unwrap();
+    let Some(command) = commands.pop() else {
+        return Ok(())
+    };
+
     let command = command.lower(names).map_err(|err| (None, line, err))?;
 
     command
