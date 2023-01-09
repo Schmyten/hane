@@ -1,8 +1,35 @@
 use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
 
-/// First in last out stack, with indexation from newest to oldest entry.
-/// All elements must be inserted through a `StackSlot`.
+/// First in last out stack, indexed from newest to oldest entry.
+/// All elements are inserted through `StackSlots` - smart pointers which ensures elements inserted
+/// through them are dropped when they go out of scope. See [slot] for creating a new slot without
+/// inserting any elements, or [push] to insert an element, and get the slot it was inserted through
+///
+/// # Examples
+///
+/// ```
+/// # use hane_kernel::Stack;
+/// let mut stack = Stack::new();
+/// {
+///     let mut stack = stack.push(1);
+///     {
+///         let stack = stack.push(2);
+///         assert_eq!(stack.get(0), Some(&2));
+///         assert_eq!(stack.get(1), Some(&1));
+///     }
+///     assert_eq!(stack.get(0), Some(&1));
+///     assert_eq!(stack.get(1), None);
+/// }
+/// assert_eq!(stack.get(0), None);
+/// ```
+///
+/// ```
+/// # use hane_kernel::Stack;
+/// let mut stack = Stack::new();
+/// let _ = stack.push(1);
+/// assert_eq!(stack.get(0), None);
+/// ```
 #[derive(Default, Clone)]
 pub struct Stack<T>(Vec<T>);
 
@@ -13,6 +40,7 @@ impl<T> From<Vec<T>> for Stack<T> {
 }
 
 impl<T> Stack<T> {
+    /// Creates a new stack
     pub fn new() -> Self {
         Stack(Vec::new())
     }
