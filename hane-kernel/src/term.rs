@@ -6,12 +6,18 @@ use crate::entry::{Binder, Entry, EntryRef};
 use crate::global::GEntryRef;
 use crate::{Global, Sort, Stack, TypeError, TypeErrorVariant};
 
+/// A term of the logic, generic over some metadata ([M], [B]). Examples could be span information,
+/// or a name. The kernel ignores this information, but passes it through all future
+/// transformations so a driver of the kernel can know from which source as much as possible of the
+/// kernels output originates. The [M] will be present in every term, whereas [B] is usefull for
+/// naming constructors.
 #[derive(Clone)]
 pub struct Term<M, B> {
     pub meta: M,
     pub variant: Box<TermVariant<M, B>>,
 }
 
+/// The set of basic constructs the kernel understands
 #[derive(Clone)]
 pub enum TermVariant<M, B> {
     Sort(Sort),
@@ -24,6 +30,8 @@ pub enum TermVariant<M, B> {
     Match(Term<M, B>, B, MatchArm<M, B>, Vec<MatchArm<M, B>>),
 }
 
+/// A match arm, with the name of the constructor being matched, the parameters destructed, and the
+/// term it these parameters should be live in.
 #[derive(Clone)]
 pub struct MatchArm<M, B> {
     pub meta: M,
@@ -38,6 +46,7 @@ impl<M, B> PartialEq for Term<M, B> {
     }
 }
 
+/// Deep equality between terms, ignores meta information (stuff of type [M] and [B]).
 impl<M, B> PartialEq for TermVariant<M, B> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
