@@ -230,6 +230,10 @@ impl<M: Clone, B: Clone> Term<M, B> {
         }
     }
 
+
+    /// Test: positivity.v
+    /// Inductive T : Type -> Type :=
+    ///  | t : forall A : Type, T (T A) -> T A.
     pub fn strict_positivity(
         &self,
         global: &Global<M, B>,
@@ -346,6 +350,7 @@ impl<M: Clone, B: Clone> Term<M, B> {
         })
     }
 
+    /// Leaf first normalization
     pub fn normalize(&mut self, global: &Global<M, B>, local: &mut Stack<Entry<M, B>>) {
         loop {
             match &mut *self.variant {
@@ -492,6 +497,8 @@ impl<M: Clone, B: Clone> Term<M, B> {
         }
     }
 
+    /// eta reduction (more commonly used as eta expansion): (|x|f(x)) |> f
+    /// Not legal in normalization, but useful to check if two terms are convertible
     fn eta(&mut self) {
         match &mut *self.variant {
             TermVariant::Sort(_) => {}
