@@ -27,8 +27,8 @@ fn main() -> process::ExitCode {
             .expect(&format!("Could not find \"{}\"", path.to_string_lossy()));
         paths.push(path);
     }
-    let mut global = HashSet::new();
     for path in paths {
+        let mut global = HashSet::new();
         let content = read_to_string(&path).expect(&format!(
             "Found invalid utf-8 in {}",
             path.to_string_lossy()
